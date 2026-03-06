@@ -8,16 +8,22 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  fileSelect: [path: string]
+  fileOpen: [path: string]
 }>()
 
 const rootNodes = ref<TreeNode[]>([])
 const rootLoading = ref(false)
 const rootError = ref<string | null>(null)
+const selectedPath = ref<string | undefined>(undefined)
 
 watch(
   () => props.connectionId,
-  (id) => { if (id) loadDir('/', null) },
+  (id) => {
+    if (id) {
+      selectedPath.value = undefined
+      loadDir('/', null)
+    }
+  },
   { immediate: true }
 )
 
@@ -66,15 +72,20 @@ async function loadDir(path: string, parentNode: TreeNode | null): Promise<void>
   }
 }
 
-async function toggleNode(node: TreeNode): Promise<void> {
-  if (!node.isDirectory) {
-    emit('fileSelect', node.path)
-    return
-  }
+async function handleDirToggle(node: TreeNode): Promise<void> {
   node.expanded = !node.expanded
   if (node.expanded && !node.children) {
     await loadDir(node.path, node)
   }
+}
+
+function handleFileSelect(node: TreeNode): void {
+  selectedPath.value = node.path
+}
+
+function handleFileOpen(node: TreeNode): void {
+  selectedPath.value = node.path
+  emit('fileOpen', node.path)
 }
 </script>
 
@@ -157,7 +168,10 @@ async function toggleNode(node: TreeNode): Promise<void> {
         :key="node.path"
         :node="node"
         :depth="0"
-        @toggle="toggleNode"
+        :selected-path="selectedPath"
+        @dir-toggle="handleDirToggle"
+        @file-select="handleFileSelect"
+        @file-open="handleFileOpen"
       />
     </div>
   </div>

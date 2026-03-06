@@ -13,6 +13,8 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const highlightedHtml = ref('')
 
+let requestSeq = 0
+
 const fileExtension = computed(() => props.path.split('.').pop()?.toLowerCase() ?? '')
 
 const fileName = computed(() => props.path.split('/').pop() ?? props.path)
@@ -31,26 +33,31 @@ watch(
   () => [props.connectionId, props.path] as [string, string],
   async ([connId, filePath]) => {
     if (!connId || !filePath) return
+    const seq = ++requestSeq
     loading.value = true
     error.value = null
     content.value = null
     highlightedHtml.value = ''
     try {
       const result = await window.ssh.readFile(connId, filePath)
+      if (seq !== requestSeq) return
       content.value = result
       if (result.text !== undefined) {
         const ext = filePath.split('.').pop() ?? ''
         try {
           const highlighted = hljs.highlight(result.text, { language: ext, ignoreIllegals: true })
+          if (seq !== requestSeq) return
           highlightedHtml.value = highlighted.value
         } catch {
+          if (seq !== requestSeq) return
           highlightedHtml.value = escapeHtml(result.text)
         }
       }
     } catch (err: unknown) {
+      if (seq !== requestSeq) return
       error.value = err instanceof Error ? err.message : String(err)
     } finally {
-      loading.value = false
+      if (seq === requestSeq) loading.value = false
     }
   },
   { immediate: true }

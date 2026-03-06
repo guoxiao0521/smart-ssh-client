@@ -4,20 +4,39 @@ import type { TreeNode } from '../types'
 const props = defineProps<{
   node: TreeNode
   depth: number
+  selectedPath?: string
 }>()
 
 const emit = defineEmits<{
-  toggle: [node: TreeNode]
+  dirToggle: [node: TreeNode]
+  fileSelect: [node: TreeNode]
+  fileOpen: [node: TreeNode]
 }>()
+
+function handleClick(): void {
+  if (props.node.isDirectory) {
+    emit('dirToggle', props.node)
+  } else {
+    emit('fileSelect', props.node)
+  }
+}
+
+function handleDblClick(): void {
+  if (!props.node.isDirectory) {
+    emit('fileOpen', props.node)
+  }
+}
 </script>
 
 <template>
   <div class="tree-node-wrapper">
     <div
       class="tree-node"
+      :class="{ selected: !props.node.isDirectory && props.selectedPath === props.node.path }"
       :style="{ paddingLeft: (props.depth * 14 + 8) + 'px' }"
       :title="props.node.path"
-      @click="emit('toggle', props.node)"
+      @click="handleClick"
+      @dblclick.stop="handleDblClick"
     >
       <span class="node-chevron">
         <template v-if="props.node.isDirectory">
@@ -122,7 +141,10 @@ const emit = defineEmits<{
         :key="child.path"
         :node="child"
         :depth="props.depth + 1"
-        @toggle="emit('toggle', $event)"
+        :selected-path="props.selectedPath"
+        @dir-toggle="emit('dirToggle', $event)"
+        @file-select="emit('fileSelect', $event)"
+        @file-open="emit('fileOpen', $event)"
       />
     </template>
   </div>
@@ -146,6 +168,15 @@ const emit = defineEmits<{
 }
 .tree-node:hover {
   background: var(--color-hover);
+}
+.tree-node.selected {
+  background: var(--color-active);
+}
+.tree-node.selected .node-name {
+  color: var(--color-accent-hover);
+}
+.tree-node.selected .icon-file {
+  color: var(--color-accent-light);
 }
 
 .node-chevron {
