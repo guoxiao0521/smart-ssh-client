@@ -10,17 +10,7 @@ on:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            build-script: build:win
-          - os: macos-latest
-            build-script: build:mac
-          - os: ubuntu-latest
-            build-script: build:linux
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -31,11 +21,11 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run ${{ matrix.build-script }}
+      - run: npm run build:win
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-dist
+          name: windows-dist
           path: dist/
 
   release:
