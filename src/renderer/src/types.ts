@@ -33,8 +33,5 @@ export interface TreeNode {
   path: string
   isDirectory: boolean
   size: number
-  children?: TreeNode[]
-  expanded: boolean
   loading: boolean
-  error?: string
 }
