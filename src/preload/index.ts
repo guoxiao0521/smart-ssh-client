@@ -28,6 +28,7 @@ export type FileContent = {
 }
 
 export type TerminalDataPayload = { id: string; data: string }
+export type UploadResult = { uploaded: number; uploadedPaths: string[] }
 
 const sshAPI = {
   getConfig: (): Promise<SshHostConfig[]> => ipcRenderer.invoke('ssh:get-config'),
@@ -39,8 +40,10 @@ const sshAPI = {
     ipcRenderer.invoke('ssh:list-dir', { connectionId, path }),
   readFile: (connectionId: string, path: string): Promise<FileContent> =>
     ipcRenderer.invoke('ssh:read-file', { connectionId, path }),
-  uploadFile: (connectionId: string, remotePath: string): Promise<{ uploaded: number }> =>
+  uploadFile: (connectionId: string, remotePath: string): Promise<UploadResult> =>
     ipcRenderer.invoke('ssh:upload-file', { connectionId, remotePath }),
+  deleteFile: (connectionId: string, path: string): Promise<void> =>
+    ipcRenderer.invoke('ssh:delete-file', { connectionId, path }),
   pty: {
     create: (connectionId: string, cols: number, rows: number): Promise<string> =>
       ipcRenderer.invoke('ssh:pty-create', { connectionId, cols, rows }),

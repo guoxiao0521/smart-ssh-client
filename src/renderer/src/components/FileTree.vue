@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ChevronLeft, CircleAlert, Folder, LoaderCircle, RefreshCw, Upload } from 'lucide-vue-next'
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import type { FileEntry, TreeNode } from '../types'
 import TreeNodeItem from './TreeNodeItem.vue'
 
@@ -18,39 +18,54 @@ const pathInput = ref('/')
 const isLoading = ref(false)
 const loadError = ref<string | null>(null)
 const selectedPath = ref<string | undefined>(undefined)
+const highlightedPath = ref<string | undefined>(undefined)
+
+let highlightTimer: ReturnType<typeof setTimeout> | undefined
+let loadRequestSeq = 0
 
 watch(
   () => props.connectionId,
   (id) => {
     if (id) {
       selectedPath.value = undefined
+      highlightedPath.value = undefined
       navigateToDir('/')
     }
   },
   { immediate: true }
 )
 
+onBeforeUnmount(() => {
+  if (highlightTimer) clearTimeout(highlightTimer)
+})
+
 async function loadCurrentDir(): Promise<void> {
+  const requestId = ++loadRequestSeq
+  const directoryPath = currentPath.value
   isLoading.value = true
   loadError.value = null
 
   try {
-    const entries: FileEntry[] = await window.ssh.listDir(props.connectionId, currentPath.value)
+    const entries: FileEntry[] = await window.ssh.listDir(props.connectionId, directoryPath)
+    if (requestId !== loadRequestSeq) return
     const sorted = entries.slice().sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
       return a.filename.localeCompare(b.filename)
     })
     currentNodes.value = sorted.map((e) => ({
       name: e.filename,
-      path: currentPath.value === '/' ? '/' + e.filename : currentPath.value + '/' + e.filename,
+      path: directoryPath === '/' ? '/' + e.filename : directoryPath + '/' + e.filename,
       isDirectory: e.isDirectory,
       size: e.size,
       loading: false
     }))
   } catch (err: unknown) {
+    if (requestId !== loadRequestSeq) return
     loadError.value = err instanceof Error ? err.message : String(err)
   } finally {
-    isLoading.value = false
+    if (requestId === loadRequestSeq) {
+      isLoading.value = false
+    }
   }
 }
 
@@ -97,12 +112,31 @@ function handleFileOpen(node: TreeNode): void {
   emit('fileOpen', node.path)
 }
 
+async function handleFileDelete(node: TreeNode): Promise<void> {
+  if (!window.confirm(`Delete "${node.name}"?\n\nThis action cannot be undone.`)) return
+  try {
+    await window.ssh.deleteFile(props.connectionId, node.path)
+    if (selectedPath.value === node.path) selectedPath.value = undefined
+    await loadCurrentDir()
+  } catch (err: unknown) {
+    loadError.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
 async function handleUpload(): Promise<void> {
   try {
     const result = await window.ssh.uploadFile(props.connectionId, currentPath.value)
-    if (result.uploaded > 0) {
-      await loadCurrentDir()
-    }
+    if (result.uploadedPaths.length === 0) return
+    const latestUploadedPath = result.uploadedPaths[result.uploadedPaths.length - 1]
+    selectedPath.value = undefined
+    highlightedPath.value = undefined
+    await loadCurrentDir()
+    selectedPath.value = latestUploadedPath
+    highlightedPath.value = latestUploadedPath
+    if (highlightTimer) clearTimeout(highlightTimer)
+    highlightTimer = setTimeout(() => {
+      highlightedPath.value = undefined
+    }, 1600)
   } catch (err: unknown) {
     loadError.value = err instanceof Error ? err.message : String(err)
   }
@@ -171,9 +205,11 @@ async function handleUpload(): Promise<void> {
         :key="node.path"
         :node="node"
         :selected-path="selectedPath"
+        :highlighted-path="highlightedPath"
         @dir-navigate="navigateToDir(($event as TreeNode).path)"
         @file-select="handleFileSelect"
         @file-open="handleFileOpen"
+        @file-delete="handleFileDelete"
       />
     </div>
   </div>

@@ -27,6 +27,7 @@ export type FileContent = {
 }
 
 export type TerminalDataPayload = { id: string; data: string }
+export type UploadResult = { uploaded: number; uploadedPaths: string[] }
 
 export type SshPtyAPI = {
   create: (connectionId: string, cols: number, rows: number) => Promise<string>
@@ -43,7 +44,8 @@ export type SshAPI = {
   disconnect: (connectionId: string) => Promise<void>
   listDir: (connectionId: string, path: string) => Promise<FileEntry[]>
   readFile: (connectionId: string, path: string) => Promise<FileContent>
-  uploadFile: (connectionId: string, remotePath: string) => Promise<{ uploaded: number }>
+  uploadFile: (connectionId: string, remotePath: string) => Promise<UploadResult>
+  deleteFile: (connectionId: string, path: string) => Promise<void>
   pty: SshPtyAPI
 }
 

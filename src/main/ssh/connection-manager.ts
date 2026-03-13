@@ -485,6 +485,15 @@ export async function readFile(connectionId: string, path: string): Promise<File
   }
 }
 
+export async function deleteFile(connectionId: string, path: string): Promise<void> {
+  const conn = connections.get(connectionId)
+  if (!conn) throw new Error('Not connected')
+
+  return new Promise<void>((resolve, reject) => {
+    conn.sftp.unlink(path, (err) => (err ? reject(err) : resolve()))
+  })
+}
+
 export async function uploadFile(
   connectionId: string,
   remotePath: string,
@@ -499,9 +508,31 @@ export async function uploadFile(
     await new Promise<void>((resolve, reject) => {
       const readStream = createReadStream(localPath)
       const writeStream = conn.sftp.createWriteStream(tmpPath)
-      readStream.on('error', reject)
-      writeStream.on('error', reject)
-      writeStream.on('finish', resolve)
+      let isSettled = false
+
+      const cleanup = (): void => {
+        readStream.removeListener('error', handleError)
+        writeStream.removeListener('error', handleError)
+        writeStream.removeListener('close', handleClose)
+      }
+
+      const handleError = (error: Error): void => {
+        if (isSettled) return
+        isSettled = true
+        cleanup()
+        reject(error)
+      }
+
+      const handleClose = (): void => {
+        if (isSettled) return
+        isSettled = true
+        cleanup()
+        resolve()
+      }
+
+      readStream.on('error', handleError)
+      writeStream.on('error', handleError)
+      writeStream.on('close', handleClose)
       readStream.pipe(writeStream)
     })
 

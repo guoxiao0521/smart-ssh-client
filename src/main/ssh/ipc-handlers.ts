@@ -7,6 +7,7 @@ import {
   listDir,
   readFile,
   uploadFile,
+  deleteFile,
   createPty,
   resizePty,
   inputPty,
@@ -42,7 +43,11 @@ export function registerIpcHandlers(): void {
     const result = await dialog.showOpenDialog(win!, {
       properties: ['openFile', 'multiSelections']
     })
-    if (result.canceled || result.filePaths.length === 0) return { uploaded: 0 }
+    if (result.canceled || result.filePaths.length === 0) {
+      return { uploaded: 0, uploadedPaths: [] }
+    }
+
+    const uploadedPaths: string[] = []
 
     for (const localPath of result.filePaths) {
       const fileName = basename(localPath)
@@ -50,8 +55,13 @@ export function registerIpcHandlers(): void {
         ? remotePath + fileName
         : remotePath + '/' + fileName
       await uploadFile(connectionId, remoteFilePath, localPath)
+      uploadedPaths.push(remoteFilePath)
     }
-    return { uploaded: result.filePaths.length }
+    return { uploaded: uploadedPaths.length, uploadedPaths }
+  })
+
+  ipcMain.handle('ssh:delete-file', async (_event, { connectionId, path }) => {
+    return deleteFile(connectionId, path)
   })
 
   ipcMain.handle('ssh:pty-create', async (event, { connectionId, cols, rows }) => {
