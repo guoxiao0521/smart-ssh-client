@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CircleAlert, File, FileText, LoaderCircle } from 'lucide-vue-next'
 import { ref, watch, computed } from 'vue'
 import hljs from 'highlight.js'
 import type { FileContent } from '../types'
@@ -81,21 +82,13 @@ function formatSize(bytes: number): string {
   <div class="file-preview">
     <div class="preview-header">
       <div class="header-left">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+        <File
+          :size="13"
+          :stroke-width="1.8"
           class="header-icon"
           :style="{ color: path ? extBadgeColor : 'var(--color-text-muted)' }"
-        >
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
+          aria-hidden="true"
+        />
         <span class="file-name">{{ path ? fileName : 'No file selected' }}</span>
         <span v-if="path && fileExtension" class="ext-badge" :style="{ color: extBadgeColor, borderColor: extBadgeColor + '40', background: extBadgeColor + '14' }">
           .{{ fileExtension }}
@@ -105,79 +98,43 @@ function formatSize(bytes: number): string {
     </div>
 
     <div v-if="!path" class="empty-state">
-      <svg
-        width="36"
-        height="36"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <FileText
+        :size="36"
+        :stroke-width="1.2"
         class="empty-icon"
-      >
-        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-        <polyline points="14 2 14 8 20 8" />
-        <line x1="16" y1="13" x2="8" y2="13" />
-        <line x1="16" y1="17" x2="8" y2="17" />
-        <polyline points="10 9 9 9 8 9" />
-      </svg>
+        aria-hidden="true"
+      />
       <span class="empty-title">No file selected</span>
       <span class="empty-subtitle">Click a file in the explorer to preview its contents</span>
     </div>
 
     <div v-else-if="loading" class="loading-state">
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <LoaderCircle
+        :size="16"
+        :stroke-width="2"
         class="spin"
-      >
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-      </svg>
+        aria-hidden="true"
+      />
       <span>Loading file...</span>
     </div>
 
     <div v-else-if="error" class="error-msg">
-      <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <CircleAlert
+        :size="13"
+        :stroke-width="2"
         class="error-icon"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
+        aria-hidden="true"
+      />
       {{ error }}
     </div>
 
     <div v-else-if="content?.error" class="error-msg">
-      <svg
-        width="13"
-        height="13"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <CircleAlert
+        :size="13"
+        :stroke-width="2"
         class="error-icon"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
+        aria-hidden="true"
+      />
       {{ content.error }}
     </div>
 
@@ -190,20 +147,12 @@ function formatSize(bytes: number): string {
     </div>
 
     <div v-else class="binary-info">
-      <svg
-        width="28"
-        height="28"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <File
+        :size="28"
+        :stroke-width="1.5"
         class="binary-icon"
-      >
-        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-        <polyline points="14 2 14 8 20 8" />
-      </svg>
+        aria-hidden="true"
+      />
       <span class="binary-label">Binary file</span>
       <div class="meta-table">
         <div class="meta-row">

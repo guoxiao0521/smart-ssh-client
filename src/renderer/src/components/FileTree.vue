@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronLeft, CircleAlert, Folder, LoaderCircle, RefreshCw } from 'lucide-vue-next'
 import { ref, watch } from 'vue'
 import type { FileEntry, TreeNode } from '../types'
 import TreeNodeItem from './TreeNodeItem.vue'
@@ -107,51 +108,19 @@ function handleFileOpen(node: TreeNode): void {
           title="Go up"
           @click="navigateUp"
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="m15 18-6-6 6-6" />
-          </svg>
+          <ChevronLeft :size="13" :stroke-width="2.5" aria-hidden="true" />
         </button>
-        <svg
+        <Folder
           v-else
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+          :size="12"
+          :stroke-width="2"
           class="header-icon"
-        >
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-        </svg>
+          aria-hidden="true"
+        />
         <span class="section-title">Explorer</span>
       </div>
       <button class="icon-btn" title="Refresh" @click="loadCurrentDir">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M21 2v6h-6" />
-          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-          <path d="M3 22v-6h6" />
-          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-        </svg>
+        <RefreshCw :size="13" :stroke-width="2" aria-hidden="true" />
       </button>
     </div>
 
@@ -166,37 +135,17 @@ function handleFileOpen(node: TreeNode): void {
     </div>
 
     <div v-if="isLoading" class="loading-state">
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <LoaderCircle
+        :size="14"
+        :stroke-width="2"
         class="spin"
-      >
-        <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-      </svg>
+        aria-hidden="true"
+      />
       <span>Loading...</span>
     </div>
 
     <div v-else-if="loadError" class="error-msg">
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
+      <CircleAlert :size="12" :stroke-width="2" aria-hidden="true" />
       {{ loadError }}
     </div>
 

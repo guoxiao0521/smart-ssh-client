@@ -1,4 +1,14 @@
 <script setup lang="ts">
+import {
+  Check,
+  CircleAlert,
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  Power,
+  Server,
+  X
+} from 'lucide-vue-next'
 import { onMounted, ref } from 'vue'
 import { useSSH } from '../composables/useSSH'
 import type { SshHostConfig } from '../types'
@@ -8,6 +18,7 @@ const { hosts, activeConnection, loadHosts, connectHost, disconnectHost } = useS
 const connecting = ref<string | null>(null)
 const error = ref<string | null>(null)
 const showPasswordDialog = ref(false)
+const showPassword = ref(false)
 const pendingHost = ref<SshHostConfig | null>(null)
 const passwordInput = ref('')
 
@@ -54,6 +65,7 @@ async function confirmPassword(): Promise<void> {
 function cancelPassword(): void {
   showPasswordDialog.value = false
   passwordInput.value = ''
+  showPassword.value = false
   connecting.value = null
   pendingHost.value = null
 }
@@ -64,114 +76,77 @@ async function handleDisconnect(): Promise<void> {
 </script>
 
 <template>
-  <div class="connection-list">
+  <div class="connection-list" role="region" aria-label="SSH connection list">
     <div class="section-header">
       <div class="header-left">
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+        <Server
+          :size="14"
+          :stroke-width="2"
+          absolute-stroke-width
           class="header-icon"
-        >
-          <rect x="2" y="2" width="20" height="8" rx="2" />
-          <rect x="2" y="14" width="20" height="8" rx="2" />
-          <line x1="6" y1="6" x2="6.01" y2="6" />
-          <line x1="6" y1="18" x2="6.01" y2="18" />
-        </svg>
+          aria-hidden="true"
+        />
         <span class="section-title">SSH Hosts</span>
       </div>
-      <button class="icon-btn" title="Reload hosts" @click="loadHosts">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M21 2v6h-6" />
-          <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-          <path d="M3 22v-6h6" />
-          <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-        </svg>
-      </button>
     </div>
 
-    <div v-if="error" class="error-msg">
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+    <div v-if="error" class="error-msg" role="alert" aria-live="assertive">
+      <CircleAlert
+        :size="14"
+        :stroke-width="2"
+        absolute-stroke-width
         class="error-icon"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
+        aria-hidden="true"
+      />
       {{ error }}
     </div>
 
-    <ul class="host-list">
+    <ul class="host-list" role="list">
       <li
         v-for="host in hosts"
         :key="host.alias"
         :class="['host-item', { active: activeConnection?.alias === host.alias }]"
+        role="button"
+        tabindex="0"
+        :aria-label="`Connect to ${host.alias}: ${host.user ? host.user + '@' : ''}${host.host}:${host.port}`"
+        :aria-pressed="activeConnection?.alias === host.alias"
         @click="handleHostClick(host)"
+        @keydown.enter="handleHostClick(host)"
+        @keydown.space.prevent="handleHostClick(host)"
       >
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+        <Server
+          :size="14"
+          :stroke-width="2"
+          absolute-stroke-width
           class="host-server-icon"
-        >
-          <rect x="2" y="2" width="20" height="8" rx="2" />
-          <rect x="2" y="14" width="20" height="8" rx="2" />
-          <line x1="6" y1="6" x2="6.01" y2="6" />
-          <line x1="6" y1="18" x2="6.01" y2="18" />
-        </svg>
+          aria-hidden="true"
+        />
         <span class="host-info">
           <span class="host-alias">{{ host.alias }}</span>
           <span class="host-detail">{{ host.user ? host.user + '@' : '' }}{{ host.host }}:{{ host.port }}</span>
         </span>
-        <span v-if="connecting === host.alias" class="status-dot connecting" title="Connecting..." />
-        <span v-else-if="activeConnection?.alias === host.alias" class="status-dot connected" title="Connected" />
+        <span
+          v-if="connecting === host.alias"
+          class="status-dot connecting"
+          role="status"
+          aria-label="Connecting"
+        />
+        <span
+          v-else-if="activeConnection?.alias === host.alias"
+          class="status-dot connected"
+          role="status"
+          aria-label="Connected"
+        />
       </li>
     </ul>
 
     <div v-if="hosts.length === 0" class="empty-msg">
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <Server
+        :size="24"
+        :stroke-width="1.5"
         class="empty-icon"
-      >
-        <rect x="2" y="2" width="20" height="8" rx="2" />
-        <rect x="2" y="14" width="20" height="8" rx="2" />
-        <line x1="6" y1="6" x2="6.01" y2="6" />
-        <line x1="6" y1="18" x2="6.01" y2="18" />
-      </svg>
+        aria-hidden="true"
+      />
       <span>No hosts in ~/.ssh/config</span>
     </div>
 
@@ -180,107 +155,95 @@ async function handleDisconnect(): Promise<void> {
         <span class="status-dot connected" />
         <span class="active-label">{{ activeConnection.alias }}</span>
       </div>
-      <button class="disconnect-btn" title="Disconnect" @click="handleDisconnect">
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
-          <line x1="12" y1="2" x2="12" y2="12" />
-        </svg>
+      <button
+        class="disconnect-btn"
+        type="button"
+        aria-label="Disconnect"
+        title="Disconnect"
+        @click="handleDisconnect"
+      >
+        <Power :size="14" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
         Disconnect
       </button>
     </div>
 
-    <div v-if="showPasswordDialog" class="dialog-overlay" @click.self="cancelPassword">
+    <div
+      v-if="showPasswordDialog"
+      class="dialog-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dialog-title"
+      aria-describedby="dialog-desc"
+      @click.self="cancelPassword"
+    >
       <div class="dialog">
         <div class="dialog-header">
           <div class="dialog-title-row">
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+            <LockKeyhole
+              :size="16"
+              :stroke-width="2"
+              absolute-stroke-width
               class="dialog-title-icon"
-            >
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-            </svg>
-            <span class="dialog-title">Authentication Required</span>
+              aria-hidden="true"
+            />
+            <span id="dialog-title" class="dialog-title">Authentication Required</span>
           </div>
-          <button class="dialog-close-btn" @click="cancelPassword">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+          <button
+            class="dialog-close-btn"
+            type="button"
+            aria-label="Close"
+            @click="cancelPassword"
+          >
+            <X :size="14" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
           </button>
         </div>
-        <div class="dialog-body">
+        <div id="dialog-desc" class="dialog-body">
           <div class="host-badge">
-            <svg
-              width="11"
-              height="11"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <rect x="2" y="2" width="20" height="8" rx="2" />
-              <rect x="2" y="14" width="20" height="8" rx="2" />
-              <line x1="6" y1="6" x2="6.01" y2="6" />
-              <line x1="6" y1="18" x2="6.01" y2="18" />
-            </svg>
+            <Server :size="12" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
             {{ pendingHost?.alias }}
           </div>
           <div class="input-group">
-            <label class="input-label">Password</label>
-            <input
-              v-model="passwordInput"
-              type="password"
-              placeholder="Enter password..."
-              class="pw-input"
-              autofocus
-              @keydown.enter="confirmPassword"
-              @keydown.esc="cancelPassword"
-            />
+            <label class="input-label" for="pw-input">Password</label>
+            <div class="pw-input-wrapper">
+              <input
+                id="pw-input"
+                v-model="passwordInput"
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="Enter password..."
+                class="pw-input"
+                autocomplete="current-password"
+                autofocus
+                @keydown.enter="confirmPassword"
+                @keydown.esc="cancelPassword"
+              />
+              <button
+                type="button"
+                class="pw-toggle"
+                :aria-label="showPassword ? 'Hide password' : 'Show password'"
+                @click="showPassword = !showPassword"
+              >
+                <EyeOff
+                  v-if="showPassword"
+                  :size="16"
+                  :stroke-width="2"
+                  absolute-stroke-width
+                  aria-hidden="true"
+                />
+                <Eye
+                  v-else
+                  :size="16"
+                  :stroke-width="2"
+                  absolute-stroke-width
+                  aria-hidden="true"
+                />
+              </button>
+            </div>
           </div>
         </div>
         <div class="dialog-actions">
-          <button class="btn-cancel" @click="cancelPassword">Cancel</button>
-          <button class="btn-ok" @click="confirmPassword">
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
+          <button class="btn-cancel" type="button" @click="cancelPassword">Cancel</button>
+          <button class="btn-ok" type="button" @click="confirmPassword">
+            <Check :size="14" :stroke-width="2.25" absolute-stroke-width aria-hidden="true" />
             Connect
           </button>
         </div>
@@ -300,9 +263,8 @@ async function handleDisconnect(): Promise<void> {
 .section-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 8px 0 12px;
-  height: 34px;
+  padding: 0 12px;
+  min-height: 40px;
   flex-shrink: 0;
   background: var(--color-panel-header);
   border-bottom: 1px solid var(--color-border);
@@ -311,7 +273,7 @@ async function handleDisconnect(): Promise<void> {
 .header-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .header-icon {
@@ -320,36 +282,18 @@ async function handleDisconnect(): Promise<void> {
 }
 
 .section-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
   text-transform: uppercase;
-}
-
-.icon-btn {
-  background: none;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-.icon-btn:hover {
-  background: var(--color-hover-strong);
-  color: var(--color-text);
+  line-height: 1.5;
 }
 
 .host-list {
   list-style: none;
   margin: 0;
-  padding: 4px 0;
+  padding: 8px 0;
   overflow-y: auto;
   flex: 1;
 }
@@ -358,15 +302,21 @@ async function handleDisconnect(): Promise<void> {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 6px 12px;
+  padding-left: 8px;
+  min-height: 40px;
   cursor: pointer;
-  border-radius: 5px;
-  margin: 1px 6px;
+  border-radius: 6px;
+  margin: 2px 8px;
   transition: background var(--transition);
   position: relative;
 }
 .host-item:hover {
   background: var(--color-hover);
+}
+.host-item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
 }
 .host-item.active {
   background: var(--color-active);
@@ -375,12 +325,12 @@ async function handleDisconnect(): Promise<void> {
   content: '';
   position: absolute;
   left: 0;
-  top: 4px;
-  bottom: 4px;
+  top: 6px;
+  bottom: 6px;
   width: 2px;
   background: var(--color-accent);
   border-radius: 0 2px 2px 0;
-  margin-left: -6px;
+  margin-left: -8px;
 }
 
 .host-server-icon {
@@ -411,16 +361,17 @@ async function handleDisconnect(): Promise<void> {
   color: var(--color-accent-hover);
 }
 .host-detail {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
+  line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .status-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
   display: inline-block;
@@ -429,6 +380,12 @@ async function handleDisconnect(): Promise<void> {
   background: var(--color-warning);
   box-shadow: 0 0 0 0 var(--color-warning-glow);
   animation: pulse-warning 1.2s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .status-dot.connecting {
+    animation: none;
+    box-shadow: 0 0 4px var(--color-warning-glow);
+  }
 }
 .status-dot.connected {
   background: var(--color-success);
@@ -445,10 +402,11 @@ async function handleDisconnect(): Promise<void> {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 20px 12px;
-  font-size: 11px;
+  gap: 12px;
+  padding: 24px 16px;
+  font-size: 12px;
   color: var(--color-text-muted);
+  line-height: 1.5;
   text-align: center;
 }
 .empty-icon {
@@ -458,15 +416,15 @@ async function handleDisconnect(): Promise<void> {
 .error-msg {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
-  margin: 6px 8px;
-  padding: 7px 10px;
+  gap: 8px;
+  margin: 8px;
+  padding: 10px 12px;
   background: var(--color-error-subtle);
   border: 1px solid var(--color-error-border);
-  border-radius: 5px;
+  border-radius: 6px;
   font-size: 12px;
   color: var(--color-error);
-  line-height: 1.4;
+  line-height: 1.5;
   word-break: break-word;
 }
 .error-icon {
@@ -478,7 +436,7 @@ async function handleDisconnect(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-top: 1px solid var(--color-border);
   background: var(--color-active);
   flex-shrink: 0;
@@ -486,13 +444,14 @@ async function handleDisconnect(): Promise<void> {
 .active-info-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
 }
 .active-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--color-success);
+  line-height: 1.5;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -501,13 +460,14 @@ async function handleDisconnect(): Promise<void> {
 .disconnect-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   background: none;
   border: 1px solid var(--color-border);
   color: var(--color-text-muted);
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 4px;
+  font-size: 12px;
+  min-height: 32px;
+  padding: 6px 12px;
+  border-radius: 6px;
   cursor: pointer;
   flex-shrink: 0;
   transition:
@@ -520,27 +480,32 @@ async function handleDisconnect(): Promise<void> {
   border-color: var(--color-error-border);
   color: var(--color-error);
 }
+.disconnect-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 
 /* Dialog */
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 
 .dialog {
   background: var(--color-panel-header);
   border: 1px solid var(--color-border);
   border-radius: 8px;
-  width: 340px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.04);
+    0 12px 40px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
   overflow: hidden;
 }
 
@@ -548,7 +513,7 @@ async function handleDisconnect(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 12px;
+  padding: 16px 16px 12px;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -573,8 +538,10 @@ async function handleDisconnect(): Promise<void> {
   border: none;
   color: var(--color-text-muted);
   cursor: pointer;
-  padding: 3px;
-  border-radius: 4px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 6px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -585,6 +552,10 @@ async function handleDisconnect(): Promise<void> {
 .dialog-close-btn:hover {
   background: var(--color-hover-strong);
   color: var(--color-text);
+}
+.dialog-close-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .dialog-body {
@@ -597,11 +568,11 @@ async function handleDisconnect(): Promise<void> {
 .host-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
-  border-radius: 5px;
-  padding: 4px 10px;
+  border-radius: 6px;
+  padding: 6px 12px;
   font-size: 12px;
   color: var(--color-text-secondary);
   font-family: var(--font-mono);
@@ -611,25 +582,31 @@ async function handleDisconnect(): Promise<void> {
 .input-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
 .input-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
 }
 
+.pw-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
 .pw-input {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   color: var(--color-text);
-  padding: 7px 11px;
-  border-radius: 5px;
+  padding: 8px 40px 8px 12px;
+  min-height: 40px;
+  border-radius: 6px;
   font-size: 13px;
   font-family: var(--font-mono);
+  width: 100%;
   outline: none;
   transition: border-color var(--transition);
 }
@@ -640,20 +617,47 @@ async function handleDisconnect(): Promise<void> {
 .pw-input::placeholder {
   color: var(--color-text-muted);
 }
+.pw-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+.pw-toggle:hover {
+  color: var(--color-text);
+  background: var(--color-hover);
+}
+.pw-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 
 .dialog-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  padding: 12px 16px;
+  padding: 16px;
   border-top: 1px solid var(--color-border);
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.12);
 }
 
 .btn-cancel,
 .btn-ok {
-  padding: 6px 14px;
-  border-radius: 5px;
+  min-height: 36px;
+  padding: 8px 16px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -672,11 +676,16 @@ async function handleDisconnect(): Promise<void> {
   background: var(--color-hover-strong);
   color: var(--color-text);
 }
+.btn-cancel:focus-visible,
+.btn-ok:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 
 .btn-ok {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: var(--color-accent);
   border: 1px solid transparent;
   color: #fff;

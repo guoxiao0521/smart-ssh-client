@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CircleAlert, LoaderCircle, Terminal as TerminalIcon } from 'lucide-vue-next'
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -125,37 +126,22 @@ onUnmounted(cleanup)
   <div class="terminal-panel">
     <div class="terminal-header">
       <div class="header-left">
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+        <TerminalIcon
+          :size="13"
+          :stroke-width="2"
           class="header-icon"
-        >
-          <polyline points="4 17 10 11 4 5" />
-          <line x1="12" y1="19" x2="20" y2="19" />
-        </svg>
+          aria-hidden="true"
+        />
         <span class="section-title">Terminal</span>
       </div>
       <div class="header-right">
         <div v-if="status === 'connecting'" class="status-badge connecting">
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+          <LoaderCircle
+            :size="10"
+            :stroke-width="2"
             class="spin"
-          >
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
+            aria-hidden="true"
+          />
           Connecting
         </div>
         <div v-else-if="status === 'connected'" class="status-badge connected">
@@ -163,40 +149,19 @@ onUnmounted(cleanup)
           Connected
         </div>
         <div v-else-if="status === 'error'" class="status-badge error">
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
+          <CircleAlert :size="10" :stroke-width="2" aria-hidden="true" />
           Error
         </div>
       </div>
     </div>
 
     <div v-if="!connectionId" class="empty-state">
-      <svg
-        width="36"
-        height="36"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
+      <TerminalIcon
+        :size="36"
+        :stroke-width="1.2"
         class="empty-icon"
-      >
-        <polyline points="4 17 10 11 4 5" />
-        <line x1="12" y1="19" x2="20" y2="19" />
-      </svg>
+        aria-hidden="true"
+      />
       <span class="empty-title">No active connection</span>
       <span class="empty-subtitle">Select a host from the sidebar to start a terminal session</span>
     </div>

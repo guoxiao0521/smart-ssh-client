@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ChevronRight, File, Folder } from 'lucide-vue-next'
 import type { TreeNode } from '../types'
 
 const props = defineProps<{
@@ -37,53 +38,27 @@ function handleDblClick(): void {
   >
     <span class="node-icon">
       <template v-if="props.node.isDirectory">
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+        <Folder
+          :size="14"
+          :stroke-width="1.8"
           class="icon-folder"
-        >
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-        </svg>
+          aria-hidden="true"
+        />
       </template>
       <template v-else>
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+        <File
+          :size="13"
+          :stroke-width="1.8"
           class="icon-file"
-        >
-          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
-          <polyline points="14 2 14 8 20 8" />
-        </svg>
+          aria-hidden="true"
+        />
       </template>
     </span>
 
     <span class="node-name" :class="{ 'is-dir': props.node.isDirectory }">{{ props.node.name }}</span>
 
     <span v-if="props.node.isDirectory" class="node-chevron-right">
-      <svg
-        width="11"
-        height="11"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="m9 18 6-6-6-6" />
-      </svg>
+      <ChevronRight :size="11" :stroke-width="2.5" aria-hidden="true" />
     </span>
   </div>
 </template>

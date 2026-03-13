@@ -39,6 +39,7 @@ npm run build:win    # Windows 打包
 - TypeScript 有两套独立配置：`tsconfig.node.json`（主进程+Preload）和 `tsconfig.web.json`（渲染层）
 - 代码风格：单引号、无分号、100 字符行宽（Prettier 配置）
 - ESLint 要求：Vue 组件名必须多词（multi-word）
+- 渲染层凡是使用图标的地方，统一使用图标库组件；不要新增内联 `svg`
 
 ## Tech Stack
 
