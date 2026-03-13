@@ -43,6 +43,7 @@ export type SshAPI = {
   disconnect: (connectionId: string) => Promise<void>
   listDir: (connectionId: string, path: string) => Promise<FileEntry[]>
   readFile: (connectionId: string, path: string) => Promise<FileContent>
+  uploadFile: (connectionId: string, remotePath: string) => Promise<{ uploaded: number }>
   pty: SshPtyAPI
 }
 

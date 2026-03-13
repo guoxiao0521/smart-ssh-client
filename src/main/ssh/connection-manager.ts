@@ -1,5 +1,5 @@
 import { Client, SFTPWrapper, ClientChannel, type ConnectConfig } from 'ssh2'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, readFileSync, createReadStream } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { WebContents } from 'electron'
@@ -482,6 +482,48 @@ export async function readFile(connectionId: string, path: string): Promise<File
       size: attrs.size,
       error: 'Binary file — cannot preview.'
     }
+  }
+}
+
+export async function uploadFile(
+  connectionId: string,
+  remotePath: string,
+  localPath: string
+): Promise<void> {
+  const conn = connections.get(connectionId)
+  if (!conn) throw new Error('Not connected')
+
+  const tmpPath = remotePath + '.tmp_upload_' + Date.now()
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const readStream = createReadStream(localPath)
+      const writeStream = conn.sftp.createWriteStream(tmpPath)
+      readStream.on('error', reject)
+      writeStream.on('error', reject)
+      writeStream.on('finish', resolve)
+      readStream.pipe(writeStream)
+    })
+
+    // Prefer posix-rename@openssh.com (atomic replace, handles existing target).
+    // Only fall back to standard rename when the server explicitly doesn't support
+    // the extension — standard rename works for new files; if the target already
+    // exists the server will reject it and the caller gets a clear error (no data
+    // loss: the original file is untouched and tmpPath is cleaned up by catch).
+    const posixRenameErr = await new Promise<Error | null>((resolve) => {
+      conn.sftp.ext_openssh_rename(tmpPath, remotePath, (err) => resolve(err ?? null))
+    })
+    if (posixRenameErr !== null) {
+      if (posixRenameErr.message !== 'Server does not support this extended request') {
+        throw posixRenameErr
+      }
+      await new Promise<void>((resolve, reject) => {
+        conn.sftp.rename(tmpPath, remotePath, (err) => (err ? reject(err) : resolve()))
+      })
+    }
+  } catch (err) {
+    conn.sftp.unlink(tmpPath, () => {})
+    throw err
   }
 }
 

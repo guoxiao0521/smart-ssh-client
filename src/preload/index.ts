@@ -39,6 +39,8 @@ const sshAPI = {
     ipcRenderer.invoke('ssh:list-dir', { connectionId, path }),
   readFile: (connectionId: string, path: string): Promise<FileContent> =>
     ipcRenderer.invoke('ssh:read-file', { connectionId, path }),
+  uploadFile: (connectionId: string, remotePath: string): Promise<{ uploaded: number }> =>
+    ipcRenderer.invoke('ssh:upload-file', { connectionId, remotePath }),
   pty: {
     create: (connectionId: string, cols: number, rows: number): Promise<string> =>
       ipcRenderer.invoke('ssh:pty-create', { connectionId, cols, rows }),

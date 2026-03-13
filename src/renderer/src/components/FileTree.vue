@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronLeft, CircleAlert, Folder, LoaderCircle, RefreshCw } from 'lucide-vue-next'
+import { ChevronLeft, CircleAlert, Folder, LoaderCircle, RefreshCw, Upload } from 'lucide-vue-next'
 import { ref, watch } from 'vue'
 import type { FileEntry, TreeNode } from '../types'
 import TreeNodeItem from './TreeNodeItem.vue'
@@ -96,6 +96,17 @@ function handleFileOpen(node: TreeNode): void {
   selectedPath.value = node.path
   emit('fileOpen', node.path)
 }
+
+async function handleUpload(): Promise<void> {
+  try {
+    const result = await window.ssh.uploadFile(props.connectionId, currentPath.value)
+    if (result.uploaded > 0) {
+      await loadCurrentDir()
+    }
+  } catch (err: unknown) {
+    loadError.value = err instanceof Error ? err.message : String(err)
+  }
+}
 </script>
 
 <template>
@@ -119,9 +130,14 @@ function handleFileOpen(node: TreeNode): void {
         />
         <span class="section-title">Explorer</span>
       </div>
-      <button class="icon-btn" title="Refresh" @click="loadCurrentDir">
-        <RefreshCw :size="13" :stroke-width="2" aria-hidden="true" />
-      </button>
+      <div class="header-actions">
+        <button class="icon-btn" title="Upload files" :disabled="isLoading" @click="handleUpload">
+          <Upload :size="13" :stroke-width="2" aria-hidden="true" />
+        </button>
+        <button class="icon-btn" title="Refresh" @click="loadCurrentDir">
+          <RefreshCw :size="13" :stroke-width="2" aria-hidden="true" />
+        </button>
+      </div>
     </div>
 
     <div class="path-bar">
@@ -199,6 +215,12 @@ function handleFileOpen(node: TreeNode): void {
   letter-spacing: 0.06em;
   color: var(--color-text-muted);
   text-transform: uppercase;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .icon-btn {
