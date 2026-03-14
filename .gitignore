@@ -5,3 +5,4 @@ out
 .eslintcache
 *.log*
 .cursor
+.claude/settings.local.json
