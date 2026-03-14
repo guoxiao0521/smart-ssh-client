@@ -5,17 +5,25 @@ import { app } from 'electron'
 
 type CredentialMap = Record<string, string>
 
+let cache: CredentialMap | null = null
+
 function getStorePath(): string {
   return join(app.getPath('userData'), 'credentials.json')
 }
 
 function readStore(): CredentialMap {
+  if (cache !== null) return cache
   const storePath = getStorePath()
-  if (!existsSync(storePath)) return {}
+  if (!existsSync(storePath)) {
+    cache = {}
+    return cache
+  }
   try {
-    return JSON.parse(readFileSync(storePath, 'utf-8'))
+    cache = JSON.parse(readFileSync(storePath, 'utf-8'))
+    return cache!
   } catch {
-    return {}
+    cache = {}
+    return cache
   }
 }
 
@@ -24,6 +32,7 @@ function writeStore(store: CredentialMap): void {
   const storeDir = dirname(storePath)
   if (!existsSync(storeDir)) mkdirSync(storeDir, { recursive: true })
   writeFileSync(storePath, JSON.stringify(store, null, 2), 'utf-8')
+  cache = store
 }
 
 export function getSavedPassword(hostAlias: string): string | null {
@@ -57,4 +66,9 @@ export function hasSavedPassword(hostAlias: string): boolean {
   if (!safeStorage.isEncryptionAvailable()) return false
   const store = readStore()
   return hostAlias in store
+}
+
+export function listSavedPasswordHosts(): string[] {
+  if (!safeStorage.isEncryptionAvailable()) return []
+  return Object.keys(readStore())
 }

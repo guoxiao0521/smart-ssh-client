@@ -33,10 +33,9 @@ onMounted(async () => {
 
 async function refreshSavedPasswordFlags(): Promise<void> {
   savedPasswordHosts.clear()
-  for (const host of hosts.value) {
-    if (await window.ssh.hasSavedPassword(host.alias)) {
-      savedPasswordHosts.add(host.alias)
-    }
+  const saved = await window.ssh.listSavedPasswordHosts()
+  for (const alias of saved) {
+    savedPasswordHosts.add(alias)
   }
 }
 

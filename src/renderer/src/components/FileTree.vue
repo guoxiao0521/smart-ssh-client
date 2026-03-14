@@ -123,6 +123,15 @@ async function handleFileDelete(node: TreeNode): Promise<void> {
   }
 }
 
+async function handleFileDownload(node: TreeNode): Promise<void> {
+  try {
+    const result = await window.ssh.downloadFile(props.connectionId, node.path)
+    if (result.canceled) return
+  } catch (err: unknown) {
+    loadError.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
 async function handleUpload(): Promise<void> {
   try {
     const result = await window.ssh.uploadFile(props.connectionId, currentPath.value)
@@ -209,6 +218,7 @@ async function handleUpload(): Promise<void> {
         @dir-navigate="navigateToDir(($event as TreeNode).path)"
         @file-select="handleFileSelect"
         @file-open="handleFileOpen"
+        @file-download="handleFileDownload"
         @file-delete="handleFileDelete"
       />
     </div>

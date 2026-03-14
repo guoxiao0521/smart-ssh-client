@@ -28,6 +28,7 @@ export type FileContent = {
 
 export type TerminalDataPayload = { id: string; data: string }
 export type UploadResult = { uploaded: number; uploadedPaths: string[] }
+export type DownloadResult = { canceled: boolean; savedPath?: string }
 
 export type ConnectionErrorCode =
   | 'AUTH_REQUIRED'
@@ -57,8 +58,10 @@ export type SshAPI = {
   listDir: (connectionId: string, path: string) => Promise<FileEntry[]>
   readFile: (connectionId: string, path: string) => Promise<FileContent>
   uploadFile: (connectionId: string, remotePath: string) => Promise<UploadResult>
+  downloadFile: (connectionId: string, remotePath: string) => Promise<DownloadResult>
   deleteFile: (connectionId: string, path: string) => Promise<void>
   hasSavedPassword: (hostAlias: string) => Promise<boolean>
+  listSavedPasswordHosts: () => Promise<string[]>
   savePassword: (hostAlias: string, password: string) => Promise<boolean>
   deleteSavedPassword: (hostAlias: string) => Promise<void>
   pty: SshPtyAPI

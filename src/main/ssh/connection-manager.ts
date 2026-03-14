@@ -1,5 +1,5 @@
 import { Client, SFTPWrapper, ClientChannel, type ConnectConfig } from 'ssh2'
-import { existsSync, readFileSync, createReadStream } from 'fs'
+import { existsSync, readFileSync, createReadStream, renameSync, unlinkSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { WebContents } from 'electron'
@@ -609,6 +609,33 @@ export async function uploadFile(
     }
   } catch (err) {
     conn.sftp.unlink(tmpPath, () => {})
+    throw err
+  }
+}
+
+export async function downloadFile(
+  connectionId: string,
+  remotePath: string,
+  localPath: string
+): Promise<void> {
+  const conn = connections.get(connectionId)
+  if (!conn) throw new Error('Not connected')
+
+  const tmpPath = localPath + '.download'
+  try {
+    await new Promise<void>((resolve, reject) => {
+      conn.sftp.fastGet(remotePath, tmpPath, (err) => (err ? reject(err) : resolve()))
+    })
+    if (existsSync(localPath)) {
+      unlinkSync(localPath)
+    }
+    renameSync(tmpPath, localPath)
+  } catch (err) {
+    try {
+      unlinkSync(tmpPath)
+    } catch {
+      // ignore cleanup error
+    }
     throw err
   }
 }

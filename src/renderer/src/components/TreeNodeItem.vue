@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, File, Folder, Trash2 } from 'lucide-vue-next'
+import { ChevronRight, Download, File, Folder, Trash2 } from 'lucide-vue-next'
 import { ref } from 'vue'
 import type { TreeNode } from '../types'
 
@@ -13,6 +13,7 @@ const emit = defineEmits<{
   dirNavigate: [node: TreeNode]
   fileSelect: [node: TreeNode]
   fileOpen: [node: TreeNode]
+  fileDownload: [node: TreeNode]
   fileDelete: [node: TreeNode]
 }>()
 
@@ -55,6 +56,11 @@ function handleEscape(e: KeyboardEvent): void {
 function handleDelete(): void {
   closeMenu()
   emit('fileDelete', props.node)
+}
+
+function handleDownload(): void {
+  closeMenu()
+  emit('fileDownload', props.node)
 }
 </script>
 
@@ -102,6 +108,10 @@ function handleDelete(): void {
       class="context-menu"
       :style="{ left: menuX + 'px', top: menuY + 'px' }"
     >
+      <button class="context-menu-item" @click.stop="handleDownload">
+        <Download :size="13" :stroke-width="2" aria-hidden="true" />
+        <span>Download</span>
+      </button>
       <button class="context-menu-item danger" @click.stop="handleDelete">
         <Trash2 :size="13" :stroke-width="2" aria-hidden="true" />
         <span>Delete</span>

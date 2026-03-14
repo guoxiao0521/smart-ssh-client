@@ -7,6 +7,7 @@ import {
   listDir,
   readFile,
   uploadFile,
+  downloadFile,
   deleteFile,
   createPty,
   resizePty,
@@ -17,7 +18,8 @@ import {
   getSavedPassword,
   savePassword,
   deleteSavedPassword,
-  hasSavedPassword
+  hasSavedPassword,
+  listSavedPasswordHosts
 } from './credential-store'
 
 type ConnectResultWithSavedFlag =
@@ -42,8 +44,13 @@ export function registerIpcHandlers(): void {
             usedSavedPassword: false
           }
         }
-        const usedSavedPassword = !password && hasSavedPassword(hostAlias)
-        const effectivePassword = password ?? (usedSavedPassword ? getSavedPassword(hostAlias) ?? undefined : undefined)
+        const usedSavedPassword = password === undefined && hasSavedPassword(hostAlias)
+        const effectivePassword =
+          password !== undefined
+            ? password
+            : usedSavedPassword
+              ? getSavedPassword(hostAlias) ?? undefined
+              : undefined
         const result = await connect(hostConfig, effectivePassword, hosts)
         if (result.ok) return result
         return { ...result, usedSavedPassword }
@@ -91,6 +98,20 @@ export function registerIpcHandlers(): void {
     return { uploaded: uploadedPaths.length, uploadedPaths }
   })
 
+  ipcMain.handle('ssh:download-file', async (event, { connectionId, remotePath }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const saveResult = await dialog.showSaveDialog(win!, {
+      defaultPath: basename(remotePath)
+    })
+
+    if (saveResult.canceled || !saveResult.filePath) {
+      return { canceled: true }
+    }
+
+    await downloadFile(connectionId, remotePath, saveResult.filePath)
+    return { canceled: false, savedPath: saveResult.filePath }
+  })
+
   ipcMain.handle('ssh:delete-file', async (_event, { connectionId, path }) => {
     return deleteFile(connectionId, path)
   })
@@ -113,6 +134,10 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('ssh:has-saved-password', (_event, hostAlias: string) => {
     return hasSavedPassword(hostAlias)
+  })
+
+  ipcMain.handle('ssh:list-saved-password-hosts', () => {
+    return listSavedPasswordHosts()
   })
 
   ipcMain.handle('ssh:save-password', (_event, { hostAlias, password }) => {

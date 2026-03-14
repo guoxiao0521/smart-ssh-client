@@ -29,6 +29,7 @@ export type FileContent = {
 
 export type TerminalDataPayload = { id: string; data: string }
 export type UploadResult = { uploaded: number; uploadedPaths: string[] }
+export type DownloadResult = { canceled: boolean; savedPath?: string }
 
 export type ConnectionErrorCode =
   | 'AUTH_REQUIRED'
@@ -54,10 +55,14 @@ const sshAPI = {
     ipcRenderer.invoke('ssh:read-file', { connectionId, path }),
   uploadFile: (connectionId: string, remotePath: string): Promise<UploadResult> =>
     ipcRenderer.invoke('ssh:upload-file', { connectionId, remotePath }),
+  downloadFile: (connectionId: string, remotePath: string): Promise<DownloadResult> =>
+    ipcRenderer.invoke('ssh:download-file', { connectionId, remotePath }),
   deleteFile: (connectionId: string, path: string): Promise<void> =>
     ipcRenderer.invoke('ssh:delete-file', { connectionId, path }),
   hasSavedPassword: (hostAlias: string): Promise<boolean> =>
     ipcRenderer.invoke('ssh:has-saved-password', hostAlias),
+  listSavedPasswordHosts: (): Promise<string[]> =>
+    ipcRenderer.invoke('ssh:list-saved-password-hosts'),
   savePassword: (hostAlias: string, password: string): Promise<boolean> =>
     ipcRenderer.invoke('ssh:save-password', { hostAlias, password }),
   deleteSavedPassword: (hostAlias: string): Promise<void> =>
