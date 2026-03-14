@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 项目背景
+
+Smart SSH Client 是基于 Electron + Vue 的桌面 SSH 客户端，面向开发者和运维人员管理远程服务器。项目主线能力已打通：解析本机 `~/.ssh/config`、建立 SSH 连接（含 ProxyJump 多跳）、通过 SFTP 浏览远程目录、预览文件内容、打开远程终端。当前从「只读 SSH 客户端」向「可编辑远程文件的 SSH 客户端」演进，目标支持多连接、文件编辑保存和更完整的文件管理能力。详见 `TASK.md`。
+
 ## Commands
 
 ```bash

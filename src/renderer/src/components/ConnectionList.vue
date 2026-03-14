@@ -365,7 +365,7 @@ async function confirmDeleteHost(): Promise<void> {
         title="Add host"
         @click="openCreateHostDialog"
       >
-        <Plus :size="14" :stroke-width="2.25" absolute-stroke-width aria-hidden="true" />
+        <Plus :size="14" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
       </button>
     </div>
 
@@ -743,7 +743,7 @@ async function confirmDeleteHost(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 44px 0 12px;
   min-height: 40px;
   flex-shrink: 0;
   background: var(--color-panel-header);
@@ -774,26 +774,45 @@ async function confirmDeleteHost(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  min-height: 28px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: none;
+  border-radius: 8px;
+  background: var(--color-bg);
   color: var(--color-text-muted);
   cursor: pointer;
+  touch-action: manipulation;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.22);
   transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
     background var(--transition),
     border-color var(--transition),
     color var(--transition);
 }
 .add-host-btn:hover {
-  background: var(--color-hover);
+  background: var(--color-hover-strong);
   border-color: var(--color-accent);
   color: var(--color-accent-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 6px rgba(0, 0, 0, 0.28);
+}
+.add-host-btn:active {
+  background: var(--color-active);
+  transform: scale(0.96);
 }
 .add-host-btn:focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .add-host-btn {
+    transition: none;
+  }
 }
 
 .host-list {

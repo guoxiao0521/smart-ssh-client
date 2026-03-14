@@ -45,6 +45,8 @@ onUnmounted(() => {
     <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <button
         class="collapse-btn"
+        type="button"
+        :aria-label="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
         :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
         @click="sidebarCollapsed = !sidebarCollapsed"
       >
@@ -130,24 +132,50 @@ onUnmounted(() => {
 .collapse-btn {
   position: absolute;
   right: 6px;
-  top: 8px;
-  background: none;
-  border: none;
+  top: 4px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
   color: var(--color-text-muted);
   cursor: pointer;
-  padding: 3px;
-  border-radius: 4px;
+  touch-action: manipulation;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 1px 2px rgba(0, 0, 0, 0.22);
   z-index: 10;
   display: flex;
   align-items: center;
   justify-content: center;
   transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
     background var(--transition),
+    border-color var(--transition),
     color var(--transition);
 }
 .collapse-btn:hover {
   background: var(--color-hover-strong);
-  color: var(--color-text);
+  border-color: var(--color-accent);
+  color: var(--color-accent-hover);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 6px rgba(0, 0, 0, 0.28);
+}
+.collapse-btn:active {
+  background: var(--color-active);
+  transform: scale(0.96);
+}
+.collapse-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .collapse-btn {
+    transition: none;
+  }
 }
 
 .sidebar-section {
