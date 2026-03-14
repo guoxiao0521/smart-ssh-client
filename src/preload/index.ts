@@ -11,6 +11,16 @@ export type SshHostConfig = {
   proxyJump?: string
 }
 
+export type HostMutationInput = {
+  alias: string
+  host: string
+  port?: number
+  user?: string
+  identityFile?: string
+  bindAddress?: string
+  proxyJump?: string
+}
+
 export type FileEntry = {
   filename: string
   longname: string
@@ -45,6 +55,11 @@ export type ConnectResult =
 
 const sshAPI = {
   getConfig: (): Promise<SshHostConfig[]> => ipcRenderer.invoke('ssh:get-config'),
+  createHost: (hostConfig: HostMutationInput): Promise<SshHostConfig[]> =>
+    ipcRenderer.invoke('ssh:create-host', hostConfig),
+  updateHost: (originalAlias: string, hostConfig: HostMutationInput): Promise<SshHostConfig[]> =>
+    ipcRenderer.invoke('ssh:update-host', { originalAlias, hostConfig }),
+  deleteHost: (alias: string): Promise<SshHostConfig[]> => ipcRenderer.invoke('ssh:delete-host', alias),
   connect: (hostAlias: string, password?: string): Promise<ConnectResult> =>
     ipcRenderer.invoke('ssh:connect', { hostAlias, password }),
   disconnect: (connectionId: string): Promise<void> =>

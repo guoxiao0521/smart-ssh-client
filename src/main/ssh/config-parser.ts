@@ -13,7 +13,7 @@ export interface SshHostConfig {
   proxyJump?: string
 }
 
-function resolveSshConfigPath(): string {
+export function resolveSshConfigPath(): string {
   if (process.platform === 'win32' && process.env.USERPROFILE) {
     return join(process.env.USERPROFILE, '.ssh', 'config')
   }

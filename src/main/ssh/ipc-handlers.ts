@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
 import { basename } from 'path'
 import { parseSshConfig } from './config-parser'
+import { createHostConfig, updateHostConfig, deleteHostConfig } from './config-manager'
 import {
   connect,
   disconnect,
@@ -29,6 +30,18 @@ type ConnectResultWithSavedFlag =
 export function registerIpcHandlers(): void {
   ipcMain.handle('ssh:get-config', () => {
     return parseSshConfig()
+  })
+
+  ipcMain.handle('ssh:create-host', (_event, hostConfig) => {
+    return createHostConfig(hostConfig)
+  })
+
+  ipcMain.handle('ssh:update-host', (_event, { originalAlias, hostConfig }) => {
+    return updateHostConfig(originalAlias, hostConfig)
+  })
+
+  ipcMain.handle('ssh:delete-host', (_event, alias: string) => {
+    return deleteHostConfig(alias)
   })
 
   ipcMain.handle(

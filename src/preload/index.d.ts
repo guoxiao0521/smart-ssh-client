@@ -10,6 +10,16 @@ export type SshHostConfig = {
   proxyJump?: string
 }
 
+export type HostMutationInput = {
+  alias: string
+  host: string
+  port?: number
+  user?: string
+  identityFile?: string
+  bindAddress?: string
+  proxyJump?: string
+}
+
 export type FileEntry = {
   filename: string
   longname: string
@@ -53,6 +63,9 @@ export type SshPtyAPI = {
 
 export type SshAPI = {
   getConfig: () => Promise<SshHostConfig[]>
+  createHost: (hostConfig: HostMutationInput) => Promise<SshHostConfig[]>
+  updateHost: (originalAlias: string, hostConfig: HostMutationInput) => Promise<SshHostConfig[]>
+  deleteHost: (alias: string) => Promise<SshHostConfig[]>
   connect: (hostAlias: string, password?: string) => Promise<ConnectResult>
   disconnect: (connectionId: string) => Promise<void>
   listDir: (connectionId: string, path: string) => Promise<FileEntry[]>

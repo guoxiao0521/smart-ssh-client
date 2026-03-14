@@ -10,6 +10,16 @@ export type SshHostConfig = {
   proxyJump?: string
 }
 
+export type HostMutationInput = {
+  alias: string
+  host: string
+  port?: number
+  user?: string
+  identityFile?: string
+  bindAddress?: string
+  proxyJump?: string
+}
+
 export type FileEntry = {
   filename: string
   longname: string

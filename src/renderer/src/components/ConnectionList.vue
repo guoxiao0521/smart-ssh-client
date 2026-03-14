@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import {
+  CheckCheck,
   Check,
   CircleAlert,
+  Pencil,
+  Plus,
+  Trash2,
   Eye,
   EyeOff,
   KeyRound,
@@ -10,11 +14,12 @@ import {
   Server,
   X
 } from 'lucide-vue-next'
-import { onMounted, ref, reactive } from 'vue'
+import { onMounted, ref, reactive, watch, nextTick } from 'vue'
 import { useSSH } from '../composables/useSSH'
-import type { SshHostConfig } from '../types'
+import type { HostMutationInput, SshHostConfig } from '../types'
 
-const { hosts, activeConnection, loadHosts, connectHost, disconnectHost } = useSSH()
+const { hosts, activeConnection, loadHosts, connectHost, disconnectHost, createHost, updateHost, deleteHost } =
+  useSSH()
 
 const connecting = ref<string | null>(null)
 const error = ref<string | null>(null)
@@ -26,9 +31,49 @@ const passwordError = ref<string | null>(null)
 const rememberPassword = ref(false)
 const savedPasswordHosts = reactive(new Set<string>())
 
+const showHostDialog = ref(false)
+const hostDialogMode = ref<'create' | 'edit'>('create')
+const hostDialogError = ref<string | null>(null)
+const editingOriginalAlias = ref<string>('')
+const hostForm = reactive<Required<HostMutationInput>>({
+  alias: '',
+  host: '',
+  port: 22,
+  user: '',
+  identityFile: '',
+  bindAddress: '',
+  proxyJump: ''
+})
+
+const showDeleteDialog = ref(false)
+const deletingHostAlias = ref('')
+const deleteDialogError = ref<string | null>(null)
+
+const passwordDialogRef = ref<HTMLElement | null>(null)
+const hostDialogRef = ref<HTMLElement | null>(null)
+const deleteDialogRef = ref<HTMLElement | null>(null)
+
 onMounted(async () => {
   await loadHosts()
   await refreshSavedPasswordFlags()
+})
+
+watch(showPasswordDialog, async (isOpen) => {
+  if (!isOpen) return
+  await nextTick()
+  focusFirstDialogElement(passwordDialogRef.value)
+})
+
+watch(showHostDialog, async (isOpen) => {
+  if (!isOpen) return
+  await nextTick()
+  focusFirstDialogElement(hostDialogRef.value)
+})
+
+watch(showDeleteDialog, async (isOpen) => {
+  if (!isOpen) return
+  await nextTick()
+  focusFirstDialogElement(deleteDialogRef.value)
 })
 
 async function refreshSavedPasswordFlags(): Promise<void> {
@@ -121,6 +166,183 @@ async function clearSavedPassword(event: Event, host: SshHostConfig): Promise<vo
 async function handleDisconnect(): Promise<void> {
   await disconnectHost()
 }
+
+function resetHostForm(): void {
+  hostForm.alias = ''
+  hostForm.host = ''
+  hostForm.port = 22
+  hostForm.user = ''
+  hostForm.identityFile = ''
+  hostForm.bindAddress = ''
+  hostForm.proxyJump = ''
+}
+
+function openCreateHostDialog(): void {
+  resetHostForm()
+  editingOriginalAlias.value = ''
+  hostDialogMode.value = 'create'
+  hostDialogError.value = null
+  showHostDialog.value = true
+}
+
+function openEditHostDialog(event: Event, host: SshHostConfig): void {
+  event.stopPropagation()
+  hostDialogMode.value = 'edit'
+  editingOriginalAlias.value = host.alias
+  hostForm.alias = host.alias
+  hostForm.host = host.host
+  hostForm.port = host.port ?? 22
+  hostForm.user = host.user ?? ''
+  hostForm.identityFile = host.identityFile ?? ''
+  hostForm.bindAddress = host.bindAddress ?? ''
+  hostForm.proxyJump = host.proxyJump ?? ''
+  hostDialogError.value = null
+  showHostDialog.value = true
+}
+
+function closeHostDialog(): void {
+  showHostDialog.value = false
+  hostDialogError.value = null
+}
+
+function findFocusableElements(dialog: HTMLElement): HTMLElement[] {
+  return Array.from(
+    dialog.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    )
+  ).filter((element) => !element.hasAttribute('disabled') && !element.getAttribute('aria-hidden'))
+}
+
+function focusFirstDialogElement(dialog: HTMLElement | null): void {
+  if (!dialog) return
+  const focusableElements = findFocusableElements(dialog)
+  const target = focusableElements[0] ?? dialog
+  target.focus()
+}
+
+function handleDialogFocusTrap(
+  event: KeyboardEvent,
+  dialog: HTMLElement | null,
+  closeDialog: () => void
+): void {
+  if (event.key === 'Escape') {
+    closeDialog()
+    return
+  }
+  if (event.key !== 'Tab' || !dialog) return
+
+  const focusableElements = findFocusableElements(dialog)
+  if (focusableElements.length === 0) {
+    event.preventDefault()
+    dialog.focus()
+    return
+  }
+
+  const firstElement = focusableElements[0]
+  const lastElement = focusableElements[focusableElements.length - 1]
+  const activeElement = document.activeElement as HTMLElement | null
+
+  if (event.shiftKey && activeElement === firstElement) {
+    event.preventDefault()
+    lastElement.focus()
+    return
+  }
+
+  if (!event.shiftKey && activeElement === lastElement) {
+    event.preventDefault()
+    firstElement.focus()
+  }
+}
+
+function handlePasswordDialogKeydown(event: KeyboardEvent): void {
+  handleDialogFocusTrap(event, passwordDialogRef.value, cancelPassword)
+}
+
+function handleHostDialogKeydown(event: KeyboardEvent): void {
+  handleDialogFocusTrap(event, hostDialogRef.value, closeHostDialog)
+}
+
+function handleDeleteDialogKeydown(event: KeyboardEvent): void {
+  handleDialogFocusTrap(event, deleteDialogRef.value, closeDeleteHostDialog)
+}
+
+function validateHostForm(): HostMutationInput {
+  const alias = hostForm.alias.trim()
+  const host = hostForm.host.trim()
+  const user = hostForm.user.trim()
+  const identityFile = hostForm.identityFile.trim()
+  const bindAddress = hostForm.bindAddress.trim()
+  const proxyJump = hostForm.proxyJump.trim()
+  const parsedPort = Number(hostForm.port)
+
+  if (!alias) {
+    throw new Error('Alias is required')
+  }
+  if (!host) {
+    throw new Error('HostName is required')
+  }
+  if (!Number.isInteger(parsedPort) || parsedPort < 1 || parsedPort > 65535) {
+    throw new Error('Port must be between 1 and 65535')
+  }
+
+  return {
+    alias,
+    host,
+    port: parsedPort,
+    user,
+    identityFile: identityFile || undefined,
+    bindAddress: bindAddress || undefined,
+    proxyJump: proxyJump || undefined
+  }
+}
+
+async function submitHostDialog(): Promise<void> {
+  hostDialogError.value = null
+  try {
+    const payload = validateHostForm()
+    if (hostDialogMode.value === 'create') {
+      await createHost(payload)
+    } else {
+      const originalAlias = editingOriginalAlias.value
+      await updateHost(originalAlias, payload)
+      if (originalAlias !== payload.alias && savedPasswordHosts.has(originalAlias)) {
+        await window.ssh.deleteSavedPassword(originalAlias)
+        savedPasswordHosts.delete(originalAlias)
+      }
+    }
+    closeHostDialog()
+  } catch (e) {
+    hostDialogError.value = e instanceof Error ? e.message : 'Host operation failed'
+  }
+}
+
+function openDeleteHostDialog(event: Event, host: SshHostConfig): void {
+  event.stopPropagation()
+  deletingHostAlias.value = host.alias
+  showDeleteDialog.value = true
+  deleteDialogError.value = null
+}
+
+function closeDeleteHostDialog(): void {
+  deletingHostAlias.value = ''
+  deleteDialogError.value = null
+  showDeleteDialog.value = false
+}
+
+async function confirmDeleteHost(): Promise<void> {
+  const alias = deletingHostAlias.value
+  if (!alias) return
+  try {
+    await deleteHost(alias)
+    if (savedPasswordHosts.has(alias)) {
+      await window.ssh.deleteSavedPassword(alias)
+      savedPasswordHosts.delete(alias)
+    }
+    closeDeleteHostDialog()
+  } catch (e) {
+    deleteDialogError.value = e instanceof Error ? e.message : 'Delete host failed'
+  }
+}
 </script>
 
 <template>
@@ -136,6 +358,15 @@ async function handleDisconnect(): Promise<void> {
         />
         <span class="section-title">SSH Hosts</span>
       </div>
+      <button
+        class="add-host-btn"
+        type="button"
+        aria-label="Add host"
+        title="Add host"
+        @click="openCreateHostDialog"
+      >
+        <Plus :size="14" :stroke-width="2.25" absolute-stroke-width aria-hidden="true" />
+      </button>
     </div>
 
     <div v-if="error" class="error-msg" role="alert" aria-live="assertive">
@@ -173,6 +404,24 @@ async function handleDisconnect(): Promise<void> {
           <span class="host-alias">{{ host.alias }}</span>
           <span class="host-detail">{{ host.user ? host.user + '@' : '' }}{{ host.host }}:{{ host.port }}</span>
         </span>
+        <button
+          class="host-action-btn"
+          type="button"
+          aria-label="Edit host"
+          title="Edit host"
+          @click="openEditHostDialog($event, host)"
+        >
+          <Pencil :size="13" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
+        </button>
+        <button
+          class="host-action-btn danger"
+          type="button"
+          aria-label="Delete host"
+          title="Delete host"
+          @click="openDeleteHostDialog($event, host)"
+        >
+          <Trash2 :size="13" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
+        </button>
         <button
           v-if="savedPasswordHosts.has(host.alias) && activeConnection?.alias !== host.alias"
           class="saved-pw-btn"
@@ -233,8 +482,9 @@ async function handleDisconnect(): Promise<void> {
       aria-labelledby="dialog-title"
       aria-describedby="dialog-desc"
       @click.self="cancelPassword"
+      @keydown="handlePasswordDialogKeydown"
     >
-      <div class="dialog">
+      <div ref="passwordDialogRef" class="dialog" tabindex="-1">
         <div class="dialog-header">
           <div class="dialog-title-row">
             <LockKeyhole
@@ -325,6 +575,159 @@ async function handleDisconnect(): Promise<void> {
         </div>
       </div>
     </div>
+
+    <div
+      v-if="showHostDialog"
+      class="dialog-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="host-dialog-title"
+      @click.self="closeHostDialog"
+      @keydown="handleHostDialogKeydown"
+    >
+      <div ref="hostDialogRef" class="dialog" tabindex="-1">
+        <div class="dialog-header">
+          <div class="dialog-title-row">
+            <Server
+              :size="16"
+              :stroke-width="2"
+              absolute-stroke-width
+              class="dialog-title-icon"
+              aria-hidden="true"
+            />
+            <span id="host-dialog-title" class="dialog-title">
+              {{ hostDialogMode === 'create' ? 'Add SSH Host' : 'Edit SSH Host' }}
+            </span>
+          </div>
+          <button
+            class="dialog-close-btn"
+            type="button"
+            aria-label="Close"
+            @click="closeHostDialog"
+          >
+            <X :size="14" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
+          </button>
+        </div>
+        <div class="dialog-body host-form">
+          <div v-if="hostDialogError" class="dialog-error" role="alert">
+            <CircleAlert
+              :size="13"
+              :stroke-width="2"
+              absolute-stroke-width
+              class="dialog-error-icon"
+              aria-hidden="true"
+            />
+            {{ hostDialogError }}
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="host-alias-input">Alias</label>
+            <input id="host-alias-input" v-model="hostForm.alias" class="pw-input" autocomplete="off" />
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="host-name-input">HostName</label>
+            <input id="host-name-input" v-model="hostForm.host" class="pw-input" autocomplete="off" />
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="host-port-input">Port</label>
+            <input id="host-port-input" v-model.number="hostForm.port" class="pw-input" type="number" min="1" max="65535" />
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="host-user-input">User</label>
+            <input id="host-user-input" v-model="hostForm.user" class="pw-input" autocomplete="off" />
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="host-identity-file-input">IdentityFile</label>
+            <input
+              id="host-identity-file-input"
+              v-model="hostForm.identityFile"
+              class="pw-input"
+              autocomplete="off"
+            />
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="host-bind-address-input">BindAddress</label>
+            <input
+              id="host-bind-address-input"
+              v-model="hostForm.bindAddress"
+              class="pw-input"
+              autocomplete="off"
+            />
+          </div>
+          <div class="input-group">
+            <label class="input-label" for="host-proxy-jump-input">ProxyJump</label>
+            <input
+              id="host-proxy-jump-input"
+              v-model="hostForm.proxyJump"
+              class="pw-input"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-cancel" type="button" @click="closeHostDialog">Cancel</button>
+          <button class="btn-ok" type="button" @click="submitHostDialog">
+            <CheckCheck :size="14" :stroke-width="2.25" absolute-stroke-width aria-hidden="true" />
+            {{ hostDialogMode === 'create' ? 'Create' : 'Save' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="showDeleteDialog"
+      class="dialog-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-dialog-title"
+      @click.self="closeDeleteHostDialog"
+      @keydown="handleDeleteDialogKeydown"
+    >
+      <div ref="deleteDialogRef" class="dialog confirm-dialog" tabindex="-1">
+        <div class="dialog-header">
+          <div class="dialog-title-row">
+            <Trash2
+              :size="16"
+              :stroke-width="2"
+              absolute-stroke-width
+              class="dialog-title-icon danger-icon"
+              aria-hidden="true"
+            />
+            <span id="delete-dialog-title" class="dialog-title">Delete SSH Host</span>
+          </div>
+          <button
+            class="dialog-close-btn"
+            type="button"
+            aria-label="Close"
+            @click="closeDeleteHostDialog"
+          >
+            <X :size="14" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
+          </button>
+        </div>
+        <div class="dialog-body">
+          <div v-if="deleteDialogError" class="dialog-error" role="alert">
+            <CircleAlert
+              :size="13"
+              :stroke-width="2"
+              absolute-stroke-width
+              class="dialog-error-icon"
+              aria-hidden="true"
+            />
+            {{ deleteDialogError }}
+          </div>
+          <div class="delete-message">
+            Host <span class="host-name-highlight">{{ deletingHostAlias }}</span> will be removed from
+            <span class="host-name-highlight">~/.ssh/config</span>.
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button class="btn-cancel" type="button" @click="closeDeleteHostDialog">Cancel</button>
+          <button class="btn-danger" type="button" @click="confirmDeleteHost">
+            <Trash2 :size="14" :stroke-width="2.25" absolute-stroke-width aria-hidden="true" />
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -339,6 +742,7 @@ async function handleDisconnect(): Promise<void> {
 .section-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 12px;
   min-height: 40px;
   flex-shrink: 0;
@@ -364,6 +768,32 @@ async function handleDisconnect(): Promise<void> {
   color: var(--color-text-muted);
   text-transform: uppercase;
   line-height: 1.5;
+}
+
+.add-host-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition);
+}
+.add-host-btn:hover {
+  background: var(--color-hover);
+  border-color: var(--color-accent);
+  color: var(--color-accent-hover);
+}
+.add-host-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .host-list {
@@ -443,6 +873,38 @@ async function handleDisconnect(): Promise<void> {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.host-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition:
+    color var(--transition),
+    border-color var(--transition),
+    background var(--transition);
+}
+.host-action-btn:hover {
+  color: var(--color-accent-hover);
+  border-color: var(--color-border);
+  background: var(--color-hover);
+}
+.host-action-btn.danger:hover {
+  color: var(--color-error);
+  border-color: var(--color-error-border);
+  background: var(--color-error-subtle);
+}
+.host-action-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .saved-pw-btn {
@@ -668,6 +1130,11 @@ async function handleDisconnect(): Promise<void> {
   gap: 12px;
 }
 
+.host-form {
+  max-height: min(68vh, 560px);
+  overflow-y: auto;
+}
+
 .dialog-error {
   display: flex;
   align-items: center;
@@ -831,5 +1298,50 @@ async function handleDisconnect(): Promise<void> {
 }
 .btn-ok:hover {
   background: var(--color-accent-hover);
+}
+
+.btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  background: var(--color-error);
+  border: 1px solid transparent;
+  color: #fff;
+  transition:
+    background var(--transition),
+    color var(--transition),
+    border-color var(--transition);
+}
+.btn-danger:hover {
+  background: #e64343;
+}
+.btn-danger:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.confirm-dialog {
+  width: 420px;
+}
+
+.danger-icon {
+  color: var(--color-error);
+}
+
+.delete-message {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.host-name-highlight {
+  font-family: var(--font-mono);
+  color: var(--color-text);
 }
 </style>
