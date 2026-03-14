@@ -28,6 +28,18 @@ export type FileContent = {
 
 export type TerminalDataPayload = { id: string; data: string }
 
+export type ConnectionErrorCode =
+  | 'AUTH_REQUIRED'
+  | 'AUTH_FAILED'
+  | 'NETWORK_ERROR'
+  | 'HOST_KEY_ERROR'
+  | 'UNKNOWN'
+
+export type ConnectionError = { code: ConnectionErrorCode; message: string }
+export type ConnectResult =
+  | { ok: true; connectionId: string }
+  | { ok: false; error: ConnectionError; usedSavedPassword: boolean }
+
 export interface TreeNode {
   name: string
   path: string

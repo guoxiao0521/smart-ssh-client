@@ -30,9 +30,21 @@ export type FileContent = {
 export type TerminalDataPayload = { id: string; data: string }
 export type UploadResult = { uploaded: number; uploadedPaths: string[] }
 
+export type ConnectionErrorCode =
+  | 'AUTH_REQUIRED'
+  | 'AUTH_FAILED'
+  | 'NETWORK_ERROR'
+  | 'HOST_KEY_ERROR'
+  | 'UNKNOWN'
+
+export type ConnectionError = { code: ConnectionErrorCode; message: string }
+export type ConnectResult =
+  | { ok: true; connectionId: string }
+  | { ok: false; error: ConnectionError; usedSavedPassword: boolean }
+
 const sshAPI = {
   getConfig: (): Promise<SshHostConfig[]> => ipcRenderer.invoke('ssh:get-config'),
-  connect: (hostAlias: string, password?: string): Promise<string> =>
+  connect: (hostAlias: string, password?: string): Promise<ConnectResult> =>
     ipcRenderer.invoke('ssh:connect', { hostAlias, password }),
   disconnect: (connectionId: string): Promise<void> =>
     ipcRenderer.invoke('ssh:disconnect', connectionId),
@@ -44,6 +56,12 @@ const sshAPI = {
     ipcRenderer.invoke('ssh:upload-file', { connectionId, remotePath }),
   deleteFile: (connectionId: string, path: string): Promise<void> =>
     ipcRenderer.invoke('ssh:delete-file', { connectionId, path }),
+  hasSavedPassword: (hostAlias: string): Promise<boolean> =>
+    ipcRenderer.invoke('ssh:has-saved-password', hostAlias),
+  savePassword: (hostAlias: string, password: string): Promise<boolean> =>
+    ipcRenderer.invoke('ssh:save-password', { hostAlias, password }),
+  deleteSavedPassword: (hostAlias: string): Promise<void> =>
+    ipcRenderer.invoke('ssh:delete-saved-password', hostAlias),
   pty: {
     create: (connectionId: string, cols: number, rows: number): Promise<string> =>
       ipcRenderer.invoke('ssh:pty-create', { connectionId, cols, rows }),

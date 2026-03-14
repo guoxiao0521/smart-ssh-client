@@ -13,18 +13,49 @@ import {
   inputPty,
   closePty
 } from './connection-manager'
+import {
+  getSavedPassword,
+  savePassword,
+  deleteSavedPassword,
+  hasSavedPassword
+} from './credential-store'
+
+type ConnectResultWithSavedFlag =
+  | { ok: true; connectionId: string }
+  | { ok: false; error: { code: string; message: string }; usedSavedPassword: boolean }
 
 export function registerIpcHandlers(): void {
   ipcMain.handle('ssh:get-config', () => {
     return parseSshConfig()
   })
 
-  ipcMain.handle('ssh:connect', async (_event, { hostAlias, password }) => {
-    const hosts = parseSshConfig()
-    const hostConfig = hosts.find((h) => h.alias === hostAlias)
-    if (!hostConfig) throw new Error(`Host not found: ${hostAlias}`)
-    return connect(hostConfig, password, hosts)
-  })
+  ipcMain.handle(
+    'ssh:connect',
+    async (_event, { hostAlias, password }): Promise<ConnectResultWithSavedFlag> => {
+      try {
+        const hosts = parseSshConfig()
+        const hostConfig = hosts.find((h) => h.alias === hostAlias)
+        if (!hostConfig) {
+          return {
+            ok: false,
+            error: { code: 'UNKNOWN', message: `Host not found: ${hostAlias}` },
+            usedSavedPassword: false
+          }
+        }
+        const usedSavedPassword = !password && hasSavedPassword(hostAlias)
+        const effectivePassword = password ?? (usedSavedPassword ? getSavedPassword(hostAlias) ?? undefined : undefined)
+        const result = await connect(hostConfig, effectivePassword, hosts)
+        if (result.ok) return result
+        return { ...result, usedSavedPassword }
+      } catch (e) {
+        return {
+          ok: false,
+          error: { code: 'UNKNOWN', message: e instanceof Error ? e.message : 'Connection failed' },
+          usedSavedPassword: false
+        }
+      }
+    }
+  )
 
   ipcMain.handle('ssh:disconnect', (_event, connectionId: string) => {
     disconnect(connectionId)
@@ -78,5 +109,17 @@ export function registerIpcHandlers(): void {
 
   ipcMain.on('ssh:pty-close', (_event, ptyId: string) => {
     closePty(ptyId)
+  })
+
+  ipcMain.handle('ssh:has-saved-password', (_event, hostAlias: string) => {
+    return hasSavedPassword(hostAlias)
+  })
+
+  ipcMain.handle('ssh:save-password', (_event, { hostAlias, password }) => {
+    return savePassword(hostAlias, password)
+  })
+
+  ipcMain.handle('ssh:delete-saved-password', (_event, hostAlias: string) => {
+    deleteSavedPassword(hostAlias)
   })
 }

@@ -29,6 +29,18 @@ export type FileContent = {
 export type TerminalDataPayload = { id: string; data: string }
 export type UploadResult = { uploaded: number; uploadedPaths: string[] }
 
+export type ConnectionErrorCode =
+  | 'AUTH_REQUIRED'
+  | 'AUTH_FAILED'
+  | 'NETWORK_ERROR'
+  | 'HOST_KEY_ERROR'
+  | 'UNKNOWN'
+
+export type ConnectionError = { code: ConnectionErrorCode; message: string }
+export type ConnectResult =
+  | { ok: true; connectionId: string }
+  | { ok: false; error: ConnectionError; usedSavedPassword: boolean }
+
 export type SshPtyAPI = {
   create: (connectionId: string, cols: number, rows: number) => Promise<string>
   input: (ptyId: string, data: string) => void
@@ -40,12 +52,15 @@ export type SshPtyAPI = {
 
 export type SshAPI = {
   getConfig: () => Promise<SshHostConfig[]>
-  connect: (hostAlias: string, password?: string) => Promise<string>
+  connect: (hostAlias: string, password?: string) => Promise<ConnectResult>
   disconnect: (connectionId: string) => Promise<void>
   listDir: (connectionId: string, path: string) => Promise<FileEntry[]>
   readFile: (connectionId: string, path: string) => Promise<FileContent>
   uploadFile: (connectionId: string, remotePath: string) => Promise<UploadResult>
   deleteFile: (connectionId: string, path: string) => Promise<void>
+  hasSavedPassword: (hostAlias: string) => Promise<boolean>
+  savePassword: (hostAlias: string, password: string) => Promise<boolean>
+  deleteSavedPassword: (hostAlias: string) => Promise<void>
   pty: SshPtyAPI
 }
 

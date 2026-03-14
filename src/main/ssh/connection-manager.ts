@@ -114,36 +114,76 @@ function getAuthCandidates(hostConfig: SshHostConfig, password?: string): AuthCa
   return candidates
 }
 
+export type ConnectionErrorCode =
+  | 'AUTH_REQUIRED'
+  | 'AUTH_FAILED'
+  | 'NETWORK_ERROR'
+  | 'HOST_KEY_ERROR'
+  | 'UNKNOWN'
+
+export interface ConnectionError {
+  code: ConnectionErrorCode
+  message: string
+}
+
+const ERROR_MESSAGES: Record<ConnectionErrorCode, string> = {
+  AUTH_REQUIRED: 'Authentication required. Please provide a password.',
+  AUTH_FAILED: 'Authentication failed. Please check your password and try again.',
+  NETWORK_ERROR: 'Unable to connect. Please check the host address and your network.',
+  HOST_KEY_ERROR: 'Host key verification failed.',
+  UNKNOWN: 'An unexpected error occurred.'
+}
+
 function toError(error: unknown): Error {
   if (error instanceof Error) return error
   return new Error(String(error))
 }
 
-function isAuthenticationError(error: unknown): boolean {
+const AUTH_PATTERNS = [
+  'authentication',
+  'permission denied',
+  'all configured authentication methods failed',
+  'all authentication methods failed',
+  'no authentication method',
+  'unable to authenticate',
+  'failed to connect to agent',
+  'cannot parse privatekey',
+  'encrypted private openssh key'
+]
+
+const NETWORK_PATTERNS = [
+  'econnrefused',
+  'etimedout',
+  'enotfound',
+  'enetunreach',
+  'ehostunreach',
+  'econnreset',
+  'connect timeout',
+  'timed out while waiting for handshake',
+  'getaddrinfo'
+]
+
+const HOST_KEY_PATTERNS = ['host key', 'hostkey']
+
+function classifyError(error: unknown, hasPassword: boolean): ConnectionError {
   const message = toError(error).message.toLowerCase()
-  return (
-    message.includes('authentication') ||
-    message.includes('permission denied') ||
-    message.includes('all configured authentication methods failed') ||
-    message.includes('all authentication methods failed') ||
-    message.includes('no authentication method') ||
-    message.includes('unable to authenticate') ||
-    message.includes('failed to connect to agent') ||
-    message.includes('cannot parse privatekey') ||
-    message.includes('encrypted private openssh key')
-  )
-}
 
-function getNoAuthError(): Error {
-  return new Error('No authentication method available. Please provide a password.')
-}
-
-function normalizeConnectError(error: unknown, password?: string): Error {
-  const normalizedError = toError(error)
-  if (!password && isAuthenticationError(normalizedError)) {
-    return getNoAuthError()
+  if (HOST_KEY_PATTERNS.some((p) => message.includes(p))) {
+    return { code: 'HOST_KEY_ERROR', message: ERROR_MESSAGES.HOST_KEY_ERROR }
   }
-  return normalizedError
+
+  if (NETWORK_PATTERNS.some((p) => message.includes(p))) {
+    return { code: 'NETWORK_ERROR', message: ERROR_MESSAGES.NETWORK_ERROR }
+  }
+
+  if (AUTH_PATTERNS.some((p) => message.includes(p))) {
+    return {
+      code: hasPassword ? 'AUTH_FAILED' : 'AUTH_REQUIRED',
+      message: hasPassword ? ERROR_MESSAGES.AUTH_FAILED : ERROR_MESSAGES.AUTH_REQUIRED
+    }
+  }
+
+  return { code: 'UNKNOWN', message: toError(error).message }
 }
 
 function resolveUsername(hostConfig: SshHostConfig): string {
@@ -260,14 +300,20 @@ async function connectOnce(
 
   return new Promise((resolve, reject) => {
     const client = new Client()
+    let isSettled = false
 
     const handleReady = (): void => {
+      if (isSettled) return
+      isSettled = true
       client.removeListener('error', handleError)
       resolve(client)
     }
 
     const handleError = (error: Error): void => {
+      if (isSettled) return
+      isSettled = true
       client.removeListener('ready', handleReady)
+      client.on('error', () => {})
       client.end()
       reject(error)
     }
@@ -293,22 +339,27 @@ async function connectWithAuthFallback(
 ): Promise<Client> {
   const authCandidates = getAuthCandidates(hostConfig, password)
   if (authCandidates.length === 0) {
-    throw getNoAuthError()
+    throw Object.assign(new Error(ERROR_MESSAGES.AUTH_REQUIRED), {
+      connectionErrorCode: 'AUTH_REQUIRED' as ConnectionErrorCode
+    })
   }
 
-  let lastAuthError: unknown = null
+  let lastError: unknown = null
   for (const authCandidate of authCandidates) {
     try {
       return await connectOnce(hostConfig, authCandidate, socketFactory)
     } catch (error) {
-      lastAuthError = error
-      if (password || !isAuthenticationError(error)) {
+      lastError = error
+      const isAuthError = AUTH_PATTERNS.some((p) =>
+        toError(error).message.toLowerCase().includes(p)
+      )
+      if (password || !isAuthError) {
         throw error
       }
     }
   }
 
-  throw normalizeConnectError(lastAuthError, password)
+  throw lastError
 }
 
 function createSftp(client: Client): Promise<SFTPWrapper> {
@@ -323,11 +374,15 @@ function createSftp(client: Client): Promise<SFTPWrapper> {
   })
 }
 
+export type ConnectResult =
+  | { ok: true; connectionId: string }
+  | { ok: false; error: ConnectionError }
+
 export async function connect(
   hostConfig: SshHostConfig,
   password?: string,
   allHosts: SshHostConfig[] = []
-): Promise<string> {
+): Promise<ConnectResult> {
   const jumpClients: Client[] = []
   let targetClient: Client | null = null
 
@@ -357,7 +412,7 @@ export async function connect(
 
     const id = nextId()
     connections.set(id, { client: targetClient, sftp, hostConfig, jumpClients })
-    return id
+    return { ok: true, connectionId: id }
   } catch (error) {
     if (targetClient) {
       try {
@@ -371,7 +426,7 @@ export async function connect(
       } catch {}
     }
 
-    throw normalizeConnectError(error, password)
+    return { ok: false, error: classifyError(error, !!password) }
   }
 }
 

@@ -4,12 +4,13 @@ import {
   CircleAlert,
   Eye,
   EyeOff,
+  KeyRound,
   LockKeyhole,
   Power,
   Server,
   X
 } from 'lucide-vue-next'
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, reactive } from 'vue'
 import { useSSH } from '../composables/useSSH'
 import type { SshHostConfig } from '../types'
 
@@ -21,8 +22,23 @@ const showPasswordDialog = ref(false)
 const showPassword = ref(false)
 const pendingHost = ref<SshHostConfig | null>(null)
 const passwordInput = ref('')
+const passwordError = ref<string | null>(null)
+const rememberPassword = ref(false)
+const savedPasswordHosts = reactive(new Set<string>())
 
-onMounted(loadHosts)
+onMounted(async () => {
+  await loadHosts()
+  await refreshSavedPasswordFlags()
+})
+
+async function refreshSavedPasswordFlags(): Promise<void> {
+  savedPasswordHosts.clear()
+  for (const host of hosts.value) {
+    if (await window.ssh.hasSavedPassword(host.alias)) {
+      savedPasswordHosts.add(host.alias)
+    }
+  }
+}
 
 async function handleHostClick(host: SshHostConfig): Promise<void> {
   if (activeConnection.value?.alias === host.alias) return
@@ -31,43 +47,76 @@ async function handleHostClick(host: SshHostConfig): Promise<void> {
   await tryConnect(host)
 }
 
-async function tryConnect(host: SshHostConfig, password?: string): Promise<void> {
+async function tryConnect(
+  host: SshHostConfig,
+  password?: string,
+  shouldRemember = false
+): Promise<void> {
   connecting.value = host.alias
   error.value = null
+
+  let result: Awaited<ReturnType<typeof connectHost>>
   try {
-    await connectHost(host.alias, password)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    if (
-      !password &&
-      (msg.includes('All configured') ||
-        msg.includes('authentication') ||
-        msg.includes('No auth') ||
-        msg.includes('Failed to connect to agent'))
-    ) {
-      showPasswordDialog.value = true
-    } else {
-      error.value = msg
-    }
-  } finally {
-    if (!showPasswordDialog.value) connecting.value = null
+    result = await connectHost(host.alias, password)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Connection failed'
+    connecting.value = null
+    return
   }
+
+  if (result.ok) {
+    if (shouldRemember && password) {
+      const saved = await window.ssh.savePassword(host.alias, password)
+      if (saved) savedPasswordHosts.add(host.alias)
+    }
+    connecting.value = null
+    return
+  }
+
+  const { code, message } = result.error
+
+  if (code === 'AUTH_REQUIRED' || code === 'AUTH_FAILED') {
+    if (result.usedSavedPassword) {
+      await window.ssh.deleteSavedPassword(host.alias)
+      savedPasswordHosts.delete(host.alias)
+      passwordError.value = 'Saved password is incorrect. Please enter a new password.'
+    } else {
+      passwordError.value = code === 'AUTH_FAILED' ? message : null
+    }
+    showPasswordDialog.value = true
+    return
+  }
+
+  error.value = message
+  connecting.value = null
 }
 
 async function confirmPassword(): Promise<void> {
   if (!pendingHost.value) return
   showPasswordDialog.value = false
+  passwordError.value = null
   const pw = passwordInput.value
   passwordInput.value = ''
-  await tryConnect(pendingHost.value, pw)
+  const remember = rememberPassword.value
+  rememberPassword.value = false
+
+  await tryConnect(pendingHost.value, pw, remember)
 }
 
 function cancelPassword(): void {
   showPasswordDialog.value = false
   passwordInput.value = ''
+  passwordError.value = null
   showPassword.value = false
+  rememberPassword.value = false
   connecting.value = null
   pendingHost.value = null
+}
+
+async function clearSavedPassword(event: Event, host: SshHostConfig): Promise<void> {
+  event.stopPropagation()
+  await window.ssh.deleteSavedPassword(host.alias)
+  savedPasswordHosts.delete(host.alias)
 }
 
 async function handleDisconnect(): Promise<void> {
@@ -125,6 +174,16 @@ async function handleDisconnect(): Promise<void> {
           <span class="host-alias">{{ host.alias }}</span>
           <span class="host-detail">{{ host.user ? host.user + '@' : '' }}{{ host.host }}:{{ host.port }}</span>
         </span>
+        <button
+          v-if="savedPasswordHosts.has(host.alias) && activeConnection?.alias !== host.alias"
+          class="saved-pw-btn"
+          type="button"
+          title="Clear saved password"
+          aria-label="Clear saved password"
+          @click="clearSavedPassword($event, host)"
+        >
+          <KeyRound :size="13" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
+        </button>
         <span
           v-if="connecting === host.alias"
           class="status-dot connecting"
@@ -202,6 +261,16 @@ async function handleDisconnect(): Promise<void> {
             <Server :size="12" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
             {{ pendingHost?.alias }}
           </div>
+          <div v-if="passwordError" class="dialog-error" role="alert">
+            <CircleAlert
+              :size="13"
+              :stroke-width="2"
+              absolute-stroke-width
+              class="dialog-error-icon"
+              aria-hidden="true"
+            />
+            {{ passwordError }}
+          </div>
           <div class="input-group">
             <label class="input-label" for="pw-input">Password</label>
             <div class="pw-input-wrapper">
@@ -239,6 +308,14 @@ async function handleDisconnect(): Promise<void> {
               </button>
             </div>
           </div>
+          <label class="remember-label">
+            <input
+              v-model="rememberPassword"
+              type="checkbox"
+              class="remember-checkbox"
+            />
+            <span>Remember password</span>
+          </label>
         </div>
         <div class="dialog-actions">
           <button class="btn-cancel" type="button" @click="cancelPassword">Cancel</button>
@@ -367,6 +444,33 @@ async function handleDisconnect(): Promise<void> {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.saved-pw-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-accent-light);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition:
+    opacity var(--transition),
+    color var(--transition),
+    background var(--transition);
+}
+.saved-pw-btn:hover {
+  opacity: 1;
+  color: var(--color-error);
+  background: var(--color-error-subtle);
+}
+.saved-pw-btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .status-dot {
@@ -565,6 +669,22 @@ async function handleDisconnect(): Promise<void> {
   gap: 12px;
 }
 
+.dialog-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--color-error-subtle);
+  border: 1px solid var(--color-error-border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--color-error);
+  line-height: 1.4;
+}
+.dialog-error-icon {
+  flex-shrink: 0;
+}
+
 .host-badge {
   display: inline-flex;
   align-items: center;
@@ -642,6 +762,26 @@ async function handleDisconnect(): Promise<void> {
 .pw-toggle:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+.remember-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.remember-label:hover {
+  color: var(--color-text);
+}
+.remember-checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+  margin: 0;
 }
 
 .dialog-actions {

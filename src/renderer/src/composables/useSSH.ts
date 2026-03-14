@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { SshHostConfig } from '../types'
+import type { SshHostConfig, ConnectResult } from '../types'
 
 export interface ActiveConnection {
   id: string
@@ -29,9 +29,12 @@ export function useSSH() {
     }
   }
 
-  async function connectHost(alias: string, password?: string): Promise<void> {
-    const id = await window.ssh.connect(alias, password)
-    activeConnection.value = { id, alias }
+  async function connectHost(alias: string, password?: string): Promise<ConnectResult> {
+    const result = await window.ssh.connect(alias, password)
+    if (result.ok) {
+      activeConnection.value = { id: result.connectionId, alias }
+    }
+    return result
   }
 
   async function disconnectHost(): Promise<void> {
