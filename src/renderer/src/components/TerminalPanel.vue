@@ -16,6 +16,8 @@ let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let ptyId: string | null = null
 let resizeObserver: ResizeObserver | null = null
+let terminalInputDisposable: { dispose: () => void } | null = null
+let initRequestSeq = 0
 
 const status = ref<'idle' | 'connecting' | 'connected' | 'error'>('idle')
 const errorMsg = ref('')
@@ -26,10 +28,16 @@ function onTerminalData(payload: TerminalDataPayload): void {
   }
 }
 
+function invalidateInitRequest(): void {
+  initRequestSeq += 1
+}
+
 async function initTerminal(): Promise<void> {
   if (!terminalEl.value || !props.connectionId) return
 
+  const requestSeq = ++initRequestSeq
   await cleanup()
+  if (requestSeq !== initRequestSeq || !terminalEl.value) return
 
   terminal = new Terminal({
     theme: {
@@ -73,12 +81,17 @@ async function initTerminal(): Promise<void> {
   try {
     fitAddon.fit()
     const dims = fitAddon.proposeDimensions() ?? { cols: 80, rows: 24 }
-    ptyId = await window.ssh.pty.create(props.connectionId, dims.cols, dims.rows)
+    const createdPtyId = await window.ssh.pty.create(props.connectionId, dims.cols, dims.rows)
+    if (requestSeq !== initRequestSeq) {
+      window.ssh.pty.close(createdPtyId)
+      return
+    }
+    ptyId = createdPtyId
     status.value = 'connected'
 
     window.ssh.pty.onData(onTerminalData)
 
-    terminal.onData((data) => {
+    terminalInputDisposable = terminal.onData((data) => {
       if (ptyId) window.ssh.pty.input(ptyId, data)
     })
 
@@ -91,14 +104,17 @@ async function initTerminal(): Promise<void> {
     })
     if (terminalEl.value) resizeObserver.observe(terminalEl.value)
   } catch (err: unknown) {
+    if (requestSeq !== initRequestSeq) return
     status.value = 'error'
     errorMsg.value = err instanceof Error ? err.message : String(err)
-    terminal.write('\r\n\x1b[31m[Error: ' + errorMsg.value + ']\x1b[0m\r\n')
+    terminal?.write('\r\n\x1b[31m[Error: ' + errorMsg.value + ']\x1b[0m\r\n')
   }
 }
 
 async function cleanup(): Promise<void> {
   window.ssh.pty.offData(onTerminalData)
+  terminalInputDisposable?.dispose()
+  terminalInputDisposable = null
   if (ptyId) {
     window.ssh.pty.close(ptyId)
     ptyId = null
@@ -115,11 +131,20 @@ onMounted(() => {
 })
 
 watch(() => props.connectionId, (id) => {
-  if (id) initTerminal()
-  else cleanup()
-})
+  if (id) {
+    initTerminal()
+  } else {
+    invalidateInitRequest()
+    status.value = 'idle'
+    errorMsg.value = ''
+    void cleanup()
+  }
+}, { flush: 'post' })
 
-onUnmounted(cleanup)
+onUnmounted(() => {
+  invalidateInitRequest()
+  void cleanup()
+})
 </script>
 
 <template>

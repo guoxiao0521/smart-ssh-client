@@ -1,26 +1,34 @@
 <script setup lang="ts">
-import { ChevronLeft, ChevronRight, FolderOpen, X } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, FolderOpen, Server, X } from 'lucide-vue-next'
 import { ref, watch, onUnmounted } from 'vue'
 import ConnectionList from './components/ConnectionList.vue'
 import FileTree from './components/FileTree.vue'
 import FilePreview from './components/FilePreview.vue'
 import TerminalPanel from './components/TerminalPanel.vue'
 import { useSSH } from './composables/useSSH'
+import type { PreviewFile } from './types'
 
-const { activeConnection, previewFile, setPreviewFile } = useSSH()
+const {
+  sessions,
+  activeSession,
+  activateSession,
+  disconnectHost
+} = useSSH()
 
 const sidebarCollapsed = ref(false)
 const isPreviewDialogOpen = ref(false)
+const previewDialogFile = ref<PreviewFile | null>(null)
 
 function handleFileOpen(path: string): void {
-  if (activeConnection.value) {
-    setPreviewFile(activeConnection.value.id, path)
+  if (activeSession.value) {
+    previewDialogFile.value = { connectionId: activeSession.value.id, path }
     isPreviewDialogOpen.value = true
   }
 }
 
 function closePreviewDialog(): void {
   isPreviewDialogOpen.value = false
+  previewDialogFile.value = null
 }
 
 function onEscKey(e: KeyboardEvent): void {
@@ -59,8 +67,8 @@ onUnmounted(() => {
           <ConnectionList />
         </div>
         <div class="sidebar-divider" />
-        <div class="sidebar-section file-tree-section" v-if="activeConnection">
-          <FileTree :connection-id="activeConnection.id" @file-open="handleFileOpen" />
+        <div class="sidebar-section file-tree-section" v-if="activeSession">
+          <FileTree :connection-id="activeSession.id" @file-open="handleFileOpen" />
         </div>
         <div v-else class="sidebar-section empty-section">
           <FolderOpen
@@ -75,7 +83,41 @@ onUnmounted(() => {
     </div>
 
     <div class="right-panel">
-      <TerminalPanel :connection-id="activeConnection?.id ?? ''" />
+      <div v-if="sessions.length > 0" class="session-tabs" role="tablist" aria-label="Connection sessions">
+        <div
+          v-for="session in sessions"
+          :key="session.id"
+          class="session-tab"
+          :class="{ active: activeSession?.id === session.id }"
+          role="tab"
+          tabindex="0"
+          :aria-selected="activeSession?.id === session.id"
+          @click="activateSession(session.id)"
+          @keydown.enter="activateSession(session.id)"
+          @keydown.space.prevent="activateSession(session.id)"
+        >
+          <Server :size="12" :stroke-width="2" aria-hidden="true" />
+          <span class="session-tab-label">{{ session.alias }}</span>
+          <button
+            type="button"
+            class="session-tab-close"
+            aria-label="Close session"
+            @click.stop="disconnectHost(session.id)"
+          >
+            <X :size="12" :stroke-width="2" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <TerminalPanel
+        v-for="session in sessions"
+        :key="session.id"
+        v-show="activeSession?.id === session.id"
+        :connection-id="session.id"
+      />
+      <div v-if="sessions.length === 0" class="terminal-empty-state">
+        <Server :size="24" :stroke-width="1.5" class="empty-icon" aria-hidden="true" />
+        <span class="empty-hint">Connect to a host to open a terminal</span>
+      </div>
     </div>
 
     <Teleport to="body">
@@ -86,15 +128,17 @@ onUnmounted(() => {
       >
         <div class="preview-dialog">
           <div class="preview-dialog-header">
-            <span class="preview-dialog-title">{{ previewFile?.path?.split('/').pop() ?? 'Preview' }}</span>
+            <span class="preview-dialog-title">
+              {{ previewDialogFile?.path?.split('/').pop() ?? 'Preview' }}
+            </span>
             <button class="preview-close-btn" title="Close" @click="closePreviewDialog">
               <X :size="14" :stroke-width="2" aria-hidden="true" />
             </button>
           </div>
           <div class="preview-dialog-body">
             <FilePreview
-              :connection-id="previewFile?.connectionId ?? ''"
-              :path="previewFile?.path ?? ''"
+              :connection-id="previewDialogFile?.connectionId ?? ''"
+              :path="previewDialogFile?.path ?? ''"
             />
           </div>
         </div>
@@ -227,6 +271,91 @@ onUnmounted(() => {
   overflow: hidden;
   min-width: 0;
   background: var(--color-bg);
+}
+
+.session-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-panel-header);
+  overflow-x: auto;
+}
+
+.session-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition);
+}
+
+.session-tab:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.session-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.session-tab.active {
+  background: var(--color-active);
+  border-color: var(--color-accent);
+  color: var(--color-accent-hover);
+}
+
+.session-tab-label {
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-tab-close {
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.session-tab-close:hover {
+  background: var(--color-error-subtle);
+  color: var(--color-error);
+}
+
+.terminal-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
 .preview-overlay {

@@ -53,6 +53,11 @@ export type ConnectResult =
   | { ok: true; connectionId: string }
   | { ok: false; error: ConnectionError; usedSavedPassword: boolean }
 
+const ptyDataListenerMap = new WeakMap<
+  (payload: TerminalDataPayload) => void,
+  (_event: unknown, payload: TerminalDataPayload) => void
+>()
+
 const sshAPI = {
   getConfig: (): Promise<SshHostConfig[]> => ipcRenderer.invoke('ssh:get-config'),
   createHost: (hostConfig: HostMutationInput): Promise<SshHostConfig[]> =>
@@ -91,11 +96,17 @@ const sshAPI = {
       ipcRenderer.send('ssh:pty-resize', { ptyId, cols, rows }),
     close: (ptyId: string): void => ipcRenderer.send('ssh:pty-close', ptyId),
     onData: (cb: (payload: TerminalDataPayload) => void): void => {
-      ipcRenderer.on('ssh:terminal-data', (_event, payload) => cb(payload))
+      const listener = (_event: unknown, payload: TerminalDataPayload): void => {
+        cb(payload)
+      }
+      ptyDataListenerMap.set(cb, listener)
+      ipcRenderer.on('ssh:terminal-data', listener)
     },
     offData: (cb: (payload: TerminalDataPayload) => void): void => {
-      ipcRenderer.removeAllListeners('ssh:terminal-data')
-      void cb
+      const listener = ptyDataListenerMap.get(cb)
+      if (!listener) return
+      ipcRenderer.removeListener('ssh:terminal-data', listener)
+      ptyDataListenerMap.delete(cb)
     }
   }
 }

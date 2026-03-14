@@ -14,12 +14,22 @@ import {
   Server,
   X
 } from 'lucide-vue-next'
-import { onMounted, ref, reactive, watch, nextTick } from 'vue'
+import { computed, onMounted, ref, reactive, watch, nextTick } from 'vue'
 import { useSSH } from '../composables/useSSH'
 import type { HostMutationInput, SshHostConfig } from '../types'
 
-const { hosts, activeConnection, loadHosts, connectHost, disconnectHost, createHost, updateHost, deleteHost } =
-  useSSH()
+const {
+  hosts,
+  sessions,
+  activeSession,
+  loadHosts,
+  connectHost,
+  activateSession,
+  disconnectHost,
+  createHost,
+  updateHost,
+  deleteHost
+} = useSSH()
 
 const connecting = ref<string | null>(null)
 const error = ref<string | null>(null)
@@ -52,6 +62,8 @@ const deleteDialogError = ref<string | null>(null)
 const passwordDialogRef = ref<HTMLElement | null>(null)
 const hostDialogRef = ref<HTMLElement | null>(null)
 const deleteDialogRef = ref<HTMLElement | null>(null)
+const connectedAliases = computed(() => new Set(sessions.value.map((session) => session.alias)))
+const connectedHostCount = computed(() => sessions.value.length)
 
 onMounted(async () => {
   await loadHosts()
@@ -85,7 +97,12 @@ async function refreshSavedPasswordFlags(): Promise<void> {
 }
 
 async function handleHostClick(host: SshHostConfig): Promise<void> {
-  if (activeConnection.value?.alias === host.alias) return
+  if (activeSession.value?.alias === host.alias) return
+  const existingSession = sessions.value.find((session) => session.alias === host.alias)
+  if (existingSession) {
+    activateSession(existingSession.id)
+    return
+  }
   error.value = null
   pendingHost.value = host
   await tryConnect(host)
@@ -384,11 +401,11 @@ async function confirmDeleteHost(): Promise<void> {
       <li
         v-for="host in hosts"
         :key="host.alias"
-        :class="['host-item', { active: activeConnection?.alias === host.alias }]"
+        :class="['host-item', { active: activeSession?.alias === host.alias }]"
         role="button"
         tabindex="0"
         :aria-label="`Connect to ${host.alias}: ${host.user ? host.user + '@' : ''}${host.host}:${host.port}`"
-        :aria-pressed="activeConnection?.alias === host.alias"
+        :aria-pressed="activeSession?.alias === host.alias"
         @click="handleHostClick(host)"
         @keydown.enter="handleHostClick(host)"
         @keydown.space.prevent="handleHostClick(host)"
@@ -423,7 +440,7 @@ async function confirmDeleteHost(): Promise<void> {
           <Trash2 :size="13" :stroke-width="2" absolute-stroke-width aria-hidden="true" />
         </button>
         <button
-          v-if="savedPasswordHosts.has(host.alias) && activeConnection?.alias !== host.alias"
+          v-if="savedPasswordHosts.has(host.alias) && !connectedAliases.has(host.alias)"
           class="saved-pw-btn"
           type="button"
           title="Clear saved password"
@@ -439,7 +456,7 @@ async function confirmDeleteHost(): Promise<void> {
           aria-label="Connecting"
         />
         <span
-          v-else-if="activeConnection?.alias === host.alias"
+          v-else-if="connectedAliases.has(host.alias)"
           class="status-dot connected"
           role="status"
           aria-label="Connected"
@@ -457,10 +474,11 @@ async function confirmDeleteHost(): Promise<void> {
       <span>No hosts in ~/.ssh/config</span>
     </div>
 
-    <div v-if="activeConnection" class="active-info">
+    <div v-if="activeSession" class="active-info">
       <div class="active-info-left">
         <span class="status-dot connected" />
-        <span class="active-label">{{ activeConnection.alias }}</span>
+        <span class="active-label">{{ activeSession.alias }}</span>
+        <span class="active-count">({{ connectedHostCount }} 个连接)</span>
       </div>
       <button
         class="disconnect-btn"
@@ -1039,6 +1057,11 @@ async function confirmDeleteHost(): Promise<void> {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.active-count {
+  font-size: 11px;
+  color: var(--color-text-muted);
 }
 
 .disconnect-btn {

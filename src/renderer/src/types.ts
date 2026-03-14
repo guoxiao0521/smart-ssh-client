@@ -58,3 +58,13 @@ export interface TreeNode {
   size: number
   loading: boolean
 }
+
+export type ConnectionSession = {
+  id: string
+  alias: string
+}
+
+export type PreviewFile = {
+  connectionId: string
+  path: string
+}
