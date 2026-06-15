@@ -22,6 +22,12 @@ import {
   hasSavedPassword,
   listSavedPasswordHosts
 } from './credential-store'
+import {
+  getLastPath,
+  saveLastPath,
+  deleteLastPath,
+  renameLastPath
+} from './path-store'
 
 type ConnectResultWithSavedFlag =
   | { ok: true; connectionId: string }
@@ -159,5 +165,21 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('ssh:delete-saved-password', (_event, hostAlias: string) => {
     deleteSavedPassword(hostAlias)
+  })
+
+  ipcMain.handle('ssh:get-last-path', (_event, hostAlias: string) => {
+    return getLastPath(hostAlias)
+  })
+
+  ipcMain.handle('ssh:save-last-path', (_event, { hostAlias, path }) => {
+    saveLastPath(hostAlias, path)
+  })
+
+  ipcMain.handle('ssh:delete-last-path', (_event, hostAlias: string) => {
+    deleteLastPath(hostAlias)
+  })
+
+  ipcMain.handle('ssh:rename-last-path', (_event, { oldAlias, newAlias }) => {
+    renameLastPath(oldAlias, newAlias)
   })
 }

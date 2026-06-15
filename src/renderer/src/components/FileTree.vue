@@ -6,10 +6,12 @@ import TreeNodeItem from './TreeNodeItem.vue'
 
 const props = defineProps<{
   connectionId: string
+  initialPath: string
 }>()
 
 const emit = defineEmits<{
   fileOpen: [path: string]
+  pathChange: [connectionId: string, path: string]
 }>()
 
 const currentNodes = ref<TreeNode[]>([])
@@ -20,16 +22,23 @@ const loadError = ref<string | null>(null)
 const selectedPath = ref<string | undefined>(undefined)
 const highlightedPath = ref<string | undefined>(undefined)
 
+type LoadDirResult = 'success' | 'failed' | 'stale'
+
 let highlightTimer: ReturnType<typeof setTimeout> | undefined
 let loadRequestSeq = 0
 
 watch(
   () => props.connectionId,
-  (id) => {
+  async (id) => {
     if (id) {
+      loadRequestSeq++
       selectedPath.value = undefined
       highlightedPath.value = undefined
-      navigateToDir('/')
+      const targetPath = props.initialPath || '/'
+      const restored = await navigateToDir(targetPath)
+      if (restored === 'failed' && targetPath !== '/') {
+        await navigateToDir('/')
+      }
     }
   },
   { immediate: true }
@@ -39,7 +48,7 @@ onBeforeUnmount(() => {
   if (highlightTimer) clearTimeout(highlightTimer)
 })
 
-async function loadCurrentDir(): Promise<void> {
+async function loadCurrentDir(): Promise<LoadDirResult> {
   const requestId = ++loadRequestSeq
   const directoryPath = currentPath.value
   isLoading.value = true
@@ -47,7 +56,7 @@ async function loadCurrentDir(): Promise<void> {
 
   try {
     const entries: FileEntry[] = await window.ssh.listDir(props.connectionId, directoryPath)
-    if (requestId !== loadRequestSeq) return
+    if (requestId !== loadRequestSeq) return 'stale'
     const sorted = entries.slice().sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
       return a.filename.localeCompare(b.filename)
@@ -59,9 +68,11 @@ async function loadCurrentDir(): Promise<void> {
       size: e.size,
       loading: false
     }))
+    return 'success'
   } catch (err: unknown) {
-    if (requestId !== loadRequestSeq) return
+    if (requestId !== loadRequestSeq) return 'stale'
     loadError.value = err instanceof Error ? err.message : String(err)
+    return 'failed'
   } finally {
     if (requestId === loadRequestSeq) {
       isLoading.value = false
@@ -69,18 +80,25 @@ async function loadCurrentDir(): Promise<void> {
   }
 }
 
-async function navigateToDir(path: string): Promise<boolean> {
+async function navigateToDir(path: string): Promise<LoadDirResult> {
   const previousPath = currentPath.value
+  const connectionId = props.connectionId
   currentPath.value = path
   pathInput.value = path
-  await loadCurrentDir()
+  const result = await loadCurrentDir()
 
-  if (loadError.value) {
+  if (result === 'stale') {
+    return 'stale'
+  }
+
+  if (result === 'failed') {
     currentPath.value = previousPath
     pathInput.value = previousPath
-    return false
+    return 'failed'
   }
-  return true
+
+  emit('pathChange', connectionId, path)
+  return 'success'
 }
 
 function navigateUp(): void {

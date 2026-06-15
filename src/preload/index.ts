@@ -87,6 +87,14 @@ const sshAPI = {
     ipcRenderer.invoke('ssh:save-password', { hostAlias, password }),
   deleteSavedPassword: (hostAlias: string): Promise<void> =>
     ipcRenderer.invoke('ssh:delete-saved-password', hostAlias),
+  getLastPath: (hostAlias: string): Promise<string | null> =>
+    ipcRenderer.invoke('ssh:get-last-path', hostAlias),
+  saveLastPath: (hostAlias: string, path: string): Promise<void> =>
+    ipcRenderer.invoke('ssh:save-last-path', { hostAlias, path }),
+  deleteLastPath: (hostAlias: string): Promise<void> =>
+    ipcRenderer.invoke('ssh:delete-last-path', hostAlias),
+  renameLastPath: (oldAlias: string, newAlias: string): Promise<void> =>
+    ipcRenderer.invoke('ssh:rename-last-path', { oldAlias, newAlias }),
   pty: {
     create: (connectionId: string, cols: number, rows: number): Promise<string> =>
       ipcRenderer.invoke('ssh:pty-create', { connectionId, cols, rows }),

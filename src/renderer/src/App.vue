@@ -12,7 +12,8 @@ const {
   sessions,
   activeSession,
   activateSession,
-  disconnectHost
+  disconnectHost,
+  updateSessionPath
 } = useSSH()
 
 const sidebarCollapsed = ref(false)
@@ -24,6 +25,10 @@ function handleFileOpen(path: string): void {
     previewDialogFile.value = { connectionId: activeSession.value.id, path }
     isPreviewDialogOpen.value = true
   }
+}
+
+function handlePathChange(connectionId: string, path: string): void {
+  void updateSessionPath(connectionId, path)
 }
 
 function closePreviewDialog(): void {
@@ -68,7 +73,12 @@ onUnmounted(() => {
         </div>
         <div class="sidebar-divider" />
         <div class="sidebar-section file-tree-section" v-if="activeSession">
-          <FileTree :connection-id="activeSession.id" @file-open="handleFileOpen" />
+          <FileTree
+            :connection-id="activeSession.id"
+            :initial-path="activeSession.lastPath"
+            @file-open="handleFileOpen"
+            @path-change="handlePathChange"
+          />
         </div>
         <div v-else class="sidebar-section empty-section">
           <FolderOpen

@@ -77,6 +77,10 @@ export type SshAPI = {
   listSavedPasswordHosts: () => Promise<string[]>
   savePassword: (hostAlias: string, password: string) => Promise<boolean>
   deleteSavedPassword: (hostAlias: string) => Promise<void>
+  getLastPath: (hostAlias: string) => Promise<string | null>
+  saveLastPath: (hostAlias: string, path: string) => Promise<void>
+  deleteLastPath: (hostAlias: string) => Promise<void>
+  renameLastPath: (oldAlias: string, newAlias: string) => Promise<void>
   pty: SshPtyAPI
 }
 

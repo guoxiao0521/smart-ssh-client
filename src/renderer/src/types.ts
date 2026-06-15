@@ -62,6 +62,7 @@ export interface TreeNode {
 export type ConnectionSession = {
   id: string
   alias: string
+  lastPath: string
 }
 
 export type PreviewFile = {
