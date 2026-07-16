@@ -16,6 +16,7 @@ export interface UseSSHStore {
   connectHost: (alias: string, password?: string) => Promise<ConnectResult>
   activateSession: (connectionId: string) => void
   disconnectHost: (connectionId?: string) => Promise<void>
+  updateSessionPath: (connectionId: string, path: string) => Promise<void>
   createHost: (input: HostMutationInput) => Promise<void>
   updateHost: (originalAlias: string, input: HostMutationInput) => Promise<void>
   deleteHost: (alias: string) => Promise<void>
@@ -59,11 +60,22 @@ export function useSSH(): UseSSHStore {
 
     const result = await window.ssh.connect(alias, password)
     if (result.ok) {
-      const newSession = { id: result.connectionId, alias }
+      const savedPath = (await window.ssh.getLastPath(alias)) ?? '/'
+      const newSession = { id: result.connectionId, alias, lastPath: savedPath }
       sessions.value = [...sessions.value, newSession]
       activeSessionId.value = newSession.id
     }
     return result
+  }
+
+  async function updateSessionPath(connectionId: string, path: string): Promise<void> {
+    const session = sessions.value.find((s) => s.id === connectionId)
+    if (!session || session.lastPath === path) return
+
+    sessions.value = sessions.value.map((s) =>
+      s.id === connectionId ? { ...s, lastPath: path } : s
+    )
+    await window.ssh.saveLastPath(session.alias, path)
   }
 
   async function disconnectHost(connectionId?: string): Promise<void> {
@@ -87,6 +99,7 @@ export function useSSH(): UseSSHStore {
   async function updateHost(originalAlias: string, input: HostMutationInput): Promise<void> {
     hosts.value = await window.ssh.updateHost(originalAlias, input)
     if (originalAlias !== input.alias) {
+      await window.ssh.renameLastPath(originalAlias, input.alias)
       sessions.value = sessions.value.map((session) =>
         session.alias === originalAlias ? { ...session, alias: input.alias } : session
       )
@@ -100,6 +113,7 @@ export function useSSH(): UseSSHStore {
     for (const connectionId of sessionIdsByAlias) {
       await disconnectHost(connectionId)
     }
+    await window.ssh.deleteLastPath(alias)
     hosts.value = await window.ssh.deleteHost(alias)
   }
 
@@ -112,6 +126,7 @@ export function useSSH(): UseSSHStore {
     connectHost,
     activateSession,
     disconnectHost,
+    updateSessionPath,
     createHost,
     updateHost,
     deleteHost
