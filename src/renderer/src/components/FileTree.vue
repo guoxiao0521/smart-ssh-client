@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { ChevronLeft, CircleAlert, Folder, LoaderCircle, RefreshCw, Upload } from 'lucide-vue-next'
-import { onBeforeUnmount, ref, watch } from 'vue'
-import type { FileEntry, TreeNode } from '../types'
+import {
+  ChevronLeft,
+  CircleAlert,
+  Download,
+  Folder,
+  LoaderCircle,
+  RefreshCw,
+  Upload
+} from 'lucide-vue-next'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import type { DownloadFilesResult, FileEntry, TreeNode } from '../types'
 import TreeNodeItem from './TreeNodeItem.vue'
 
 const props = defineProps<{
@@ -18,9 +26,26 @@ const currentNodes = ref<TreeNode[]>([])
 const currentPath = ref('/')
 const pathInput = ref('/')
 const isLoading = ref(false)
+const isDownloading = ref(false)
 const loadError = ref<string | null>(null)
+const statusMessage = ref<string | null>(null)
 const selectedPath = ref<string | undefined>(undefined)
 const highlightedPath = ref<string | undefined>(undefined)
+const checkedPaths = ref<Set<string>>(new Set())
+const selectAllEl = ref<HTMLInputElement | null>(null)
+
+const fileNodes = computed(() => currentNodes.value.filter((node) => !node.isDirectory))
+const checkedCount = computed(() => checkedPaths.value.size)
+const allFilesChecked = computed(
+  () =>
+    fileNodes.value.length > 0 && fileNodes.value.every((node) => checkedPaths.value.has(node.path))
+)
+const someFilesChecked = computed(() => checkedCount.value > 0 && !allFilesChecked.value)
+const downloadLabel = computed(() =>
+  checkedCount.value > 0
+    ? `Download ${checkedCount.value} selected file${checkedCount.value === 1 ? '' : 's'}`
+    : 'Download selected files'
+)
 
 type LoadDirResult = 'success' | 'failed' | 'stale'
 
@@ -34,6 +59,8 @@ watch(
       loadRequestSeq++
       selectedPath.value = undefined
       highlightedPath.value = undefined
+      clearChecked()
+      statusMessage.value = null
       const targetPath = props.initialPath || '/'
       const restored = await navigateToDir(targetPath)
       if (restored === 'failed' && targetPath !== '/') {
@@ -43,6 +70,13 @@ watch(
   },
   { immediate: true }
 )
+
+watch([allFilesChecked, someFilesChecked, selectAllEl], async () => {
+  await nextTick()
+  if (selectAllEl.value) {
+    selectAllEl.value.indeterminate = someFilesChecked.value
+  }
+})
 
 onBeforeUnmount(() => {
   if (highlightTimer) clearTimeout(highlightTimer)
@@ -68,6 +102,7 @@ async function loadCurrentDir(): Promise<LoadDirResult> {
       size: e.size,
       loading: false
     }))
+    pruneChecked()
     return 'success'
   } catch (err: unknown) {
     if (requestId !== loadRequestSeq) return 'stale'
@@ -80,11 +115,40 @@ async function loadCurrentDir(): Promise<LoadDirResult> {
   }
 }
 
+function clearChecked(): void {
+  checkedPaths.value = new Set()
+}
+
+function pruneChecked(): void {
+  const valid = new Set(fileNodes.value.map((node) => node.path))
+  checkedPaths.value = new Set([...checkedPaths.value].filter((path) => valid.has(path)))
+}
+
+function handleFileCheckToggle(node: TreeNode, checked: boolean): void {
+  const next = new Set(checkedPaths.value)
+  if (checked) {
+    next.add(node.path)
+  } else {
+    next.delete(node.path)
+  }
+  checkedPaths.value = next
+}
+
+function toggleSelectAll(): void {
+  if (allFilesChecked.value) {
+    clearChecked()
+    return
+  }
+  checkedPaths.value = new Set(fileNodes.value.map((node) => node.path))
+}
+
 async function navigateToDir(path: string): Promise<LoadDirResult> {
   const previousPath = currentPath.value
   const connectionId = props.connectionId
   currentPath.value = path
   pathInput.value = path
+  clearChecked()
+  statusMessage.value = null
   const result = await loadCurrentDir()
 
   if (result === 'stale') {
@@ -135,6 +199,11 @@ async function handleFileDelete(node: TreeNode): Promise<void> {
   try {
     await window.ssh.deleteFile(props.connectionId, node.path)
     if (selectedPath.value === node.path) selectedPath.value = undefined
+    if (checkedPaths.value.has(node.path)) {
+      const next = new Set(checkedPaths.value)
+      next.delete(node.path)
+      checkedPaths.value = next
+    }
     await loadCurrentDir()
   } catch (err: unknown) {
     loadError.value = err instanceof Error ? err.message : String(err)
@@ -142,11 +211,62 @@ async function handleFileDelete(node: TreeNode): Promise<void> {
 }
 
 async function handleFileDownload(node: TreeNode): Promise<void> {
+  statusMessage.value = null
+  loadError.value = null
   try {
     const result = await window.ssh.downloadFile(props.connectionId, node.path)
     if (result.canceled) return
+    statusMessage.value = `Downloaded ${node.name}`
   } catch (err: unknown) {
     loadError.value = err instanceof Error ? err.message : String(err)
+  }
+}
+
+function formatDownloadFilesResult(result: DownloadFilesResult): {
+  error: string | null
+  info: string | null
+} {
+  const parts: string[] = []
+  if (result.downloaded > 0) {
+    parts.push(`Downloaded ${result.downloaded} file${result.downloaded === 1 ? '' : 's'}`)
+  }
+  if (result.skipped.length > 0) {
+    parts.push(
+      `Skipped ${result.skipped.length} existing file${result.skipped.length === 1 ? '' : 's'}`
+    )
+  }
+  if (result.failures.length > 0) {
+    const [firstFailure, ...restFailures] = result.failures
+    const extra = restFailures.length > 0 ? ` (+${restFailures.length} more)` : ''
+    const failureText = firstFailure
+      ? `${result.failures.length} failed: ${firstFailure.message}${extra}`
+      : `${result.failures.length} failed`
+    parts.push(failureText)
+    return { error: parts.join('. '), info: null }
+  }
+  if (parts.length === 0) {
+    return { error: null, info: 'No files were downloaded' }
+  }
+  return { error: null, info: parts.join('. ') }
+}
+
+async function handleBulkDownload(): Promise<void> {
+  const remotePaths = [...checkedPaths.value]
+  if (remotePaths.length === 0 || isDownloading.value) return
+
+  statusMessage.value = null
+  loadError.value = null
+  isDownloading.value = true
+  try {
+    const result = await window.ssh.downloadFiles(props.connectionId, remotePaths)
+    if (result.canceled) return
+    const message = formatDownloadFilesResult(result)
+    loadError.value = message.error
+    statusMessage.value = message.info
+  } catch (err: unknown) {
+    loadError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    isDownloading.value = false
   }
 }
 
@@ -174,25 +294,36 @@ async function handleUpload(): Promise<void> {
   <div class="file-tree">
     <div class="section-header">
       <div class="header-left">
-        <button
-          v-if="currentPath !== '/'"
-          class="icon-btn"
-          title="Go up"
-          @click="navigateUp"
-        >
+        <button v-if="currentPath !== '/'" class="icon-btn" title="Go up" @click="navigateUp">
           <ChevronLeft :size="13" :stroke-width="2.5" aria-hidden="true" />
         </button>
-        <Folder
-          v-else
-          :size="12"
-          :stroke-width="2"
-          class="header-icon"
-          aria-hidden="true"
-        />
+        <Folder v-else :size="12" :stroke-width="2" class="header-icon" aria-hidden="true" />
         <span class="section-title">Explorer</span>
       </div>
       <div class="header-actions">
-        <button class="icon-btn" title="Upload files" :disabled="isLoading" @click="handleUpload">
+        <button
+          class="icon-btn"
+          :title="downloadLabel"
+          :aria-label="downloadLabel"
+          :disabled="isLoading || checkedCount === 0"
+          :aria-busy="isDownloading"
+          @click="handleBulkDownload"
+        >
+          <LoaderCircle
+            v-if="isDownloading"
+            :size="13"
+            :stroke-width="2"
+            class="spin"
+            aria-hidden="true"
+          />
+          <Download v-else :size="13" :stroke-width="2" aria-hidden="true" />
+        </button>
+        <button
+          class="icon-btn"
+          title="Upload files"
+          :disabled="isLoading || isDownloading"
+          @click="handleUpload"
+        >
           <Upload :size="13" :stroke-width="2" aria-hidden="true" />
         </button>
         <button class="icon-btn" title="Refresh" @click="loadCurrentDir">
@@ -211,19 +342,34 @@ async function handleUpload(): Promise<void> {
       />
     </div>
 
-    <div v-if="isLoading" class="loading-state">
-      <LoaderCircle
-        :size="14"
-        :stroke-width="2"
-        class="spin"
-        aria-hidden="true"
-      />
-      <span>Loading...</span>
+    <div v-if="!isLoading && fileNodes.length > 0" class="selection-bar">
+      <label class="select-all">
+        <input
+          ref="selectAllEl"
+          type="checkbox"
+          class="select-all-checkbox"
+          :checked="allFilesChecked"
+          :disabled="isDownloading"
+          :aria-label="allFilesChecked ? 'Deselect all files' : 'Select all files'"
+          @change="toggleSelectAll"
+        />
+        <span>Select all</span>
+      </label>
+      <span v-if="checkedCount > 0" class="selection-count">{{ checkedCount }} selected</span>
     </div>
 
-    <div v-else-if="loadError" class="error-msg">
+    <div v-if="loadError" class="error-msg" role="alert">
       <CircleAlert :size="12" :stroke-width="2" aria-hidden="true" />
       {{ loadError }}
+    </div>
+
+    <div v-else-if="statusMessage" class="status-msg" role="status">
+      {{ statusMessage }}
+    </div>
+
+    <div v-if="isLoading" class="loading-state">
+      <LoaderCircle :size="14" :stroke-width="2" class="spin" aria-hidden="true" />
+      <span>Loading...</span>
     </div>
 
     <div v-else class="tree-content">
@@ -233,11 +379,14 @@ async function handleUpload(): Promise<void> {
         :node="node"
         :selected-path="selectedPath"
         :highlighted-path="highlightedPath"
+        :checked="checkedPaths.has(node.path)"
+        :check-disabled="isDownloading"
         @dir-navigate="navigateToDir(($event as TreeNode).path)"
         @file-select="handleFileSelect"
         @file-open="handleFileOpen"
         @file-download="handleFileDownload"
         @file-delete="handleFileDelete"
+        @file-check-toggle="handleFileCheckToggle"
       />
     </div>
   </div>
@@ -301,9 +450,59 @@ async function handleUpload(): Promise<void> {
     background var(--transition),
     color var(--transition);
 }
-.icon-btn:hover {
+.icon-btn:hover:not(:disabled) {
   background: var(--color-hover-strong);
   color: var(--color-text);
+}
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.icon-btn:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 4px 8px;
+  min-height: 28px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.select-all {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.select-all-checkbox {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+.select-all-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.select-all-checkbox:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.selection-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--color-text-secondary);
 }
 
 .path-bar {
@@ -345,8 +544,12 @@ async function handleUpload(): Promise<void> {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .error-msg {
@@ -357,6 +560,15 @@ async function handleUpload(): Promise<void> {
   font-size: 12px;
   color: var(--color-error);
   line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.status-msg {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--color-success);
+  line-height: 1.4;
+  flex-shrink: 0;
 }
 
 .tree-content {

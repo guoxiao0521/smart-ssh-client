@@ -7,6 +7,8 @@ const props = defineProps<{
   node: TreeNode
   selectedPath?: string
   highlightedPath?: string
+  checked?: boolean
+  checkDisabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -15,6 +17,7 @@ const emit = defineEmits<{
   fileOpen: [node: TreeNode]
   fileDownload: [node: TreeNode]
   fileDelete: [node: TreeNode]
+  fileCheckToggle: [node: TreeNode, checked: boolean]
 }>()
 
 const menuVisible = ref(false)
@@ -62,6 +65,11 @@ function handleDownload(): void {
   closeMenu()
   emit('fileDownload', props.node)
 }
+
+function handleCheckChange(event: Event): void {
+  const target = event.target as HTMLInputElement
+  emit('fileCheckToggle', props.node, target.checked)
+}
 </script>
 
 <template>
@@ -76,26 +84,30 @@ function handleDownload(): void {
     @dblclick.stop="handleDblClick"
     @contextmenu.prevent="handleContextMenu"
   >
+    <input
+      v-if="!props.node.isDirectory"
+      type="checkbox"
+      class="node-checkbox"
+      :checked="props.checked"
+      :disabled="props.checkDisabled"
+      :aria-label="`Select ${props.node.name}`"
+      @click.stop
+      @dblclick.stop
+      @change="handleCheckChange"
+    />
+    <span v-else class="node-checkbox-spacer" aria-hidden="true"></span>
     <span class="node-icon">
       <template v-if="props.node.isDirectory">
-        <Folder
-          :size="14"
-          :stroke-width="1.8"
-          class="icon-folder"
-          aria-hidden="true"
-        />
+        <Folder :size="14" :stroke-width="1.8" class="icon-folder" aria-hidden="true" />
       </template>
       <template v-else>
-        <File
-          :size="13"
-          :stroke-width="1.8"
-          class="icon-file"
-          aria-hidden="true"
-        />
+        <File :size="13" :stroke-width="1.8" class="icon-file" aria-hidden="true" />
       </template>
     </span>
 
-    <span class="node-name" :class="{ 'is-dir': props.node.isDirectory }">{{ props.node.name }}</span>
+    <span class="node-name" :class="{ 'is-dir': props.node.isDirectory }">{{
+      props.node.name
+    }}</span>
 
     <span v-if="props.node.isDirectory" class="node-chevron-right">
       <ChevronRight :size="11" :stroke-width="2.5" aria-hidden="true" />
@@ -103,11 +115,7 @@ function handleDownload(): void {
   </div>
 
   <Teleport to="body">
-    <div
-      v-if="menuVisible"
-      class="context-menu"
-      :style="{ left: menuX + 'px', top: menuY + 'px' }"
-    >
+    <div v-if="menuVisible" class="context-menu" :style="{ left: menuX + 'px', top: menuY + 'px' }">
       <button class="context-menu-item" @click.stop="handleDownload">
         <Download :size="13" :stroke-width="2" aria-hidden="true" />
         <span>Download</span>
@@ -134,6 +142,28 @@ function handleDownload(): void {
   overflow: hidden;
   transition: background var(--transition);
 }
+.node-checkbox {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+.node-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.node-checkbox:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.node-checkbox-spacer {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
 .tree-node:hover {
   background: var(--color-hover);
 }
@@ -219,7 +249,9 @@ function handleDownload(): void {
   font-size: 13px;
   cursor: pointer;
   color: var(--color-text-secondary);
-  transition: background var(--transition), color var(--transition);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 .context-menu-item:hover {
   background: var(--color-hover-strong);

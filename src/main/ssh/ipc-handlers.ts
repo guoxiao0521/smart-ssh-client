@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron'
-import { basename } from 'path'
+import { existsSync } from 'fs'
+import { basename, join } from 'path'
 import { parseSshConfig } from './config-parser'
 import { createHostConfig, updateHostConfig, deleteHostConfig } from './config-manager'
 import {
@@ -22,12 +23,7 @@ import {
   hasSavedPassword,
   listSavedPasswordHosts
 } from './credential-store'
-import {
-  getLastPath,
-  saveLastPath,
-  deleteLastPath,
-  renameLastPath
-} from './path-store'
+import { getLastPath, saveLastPath, deleteLastPath, renameLastPath } from './path-store'
 
 type ConnectResultWithSavedFlag =
   | { ok: true; connectionId: string }
@@ -68,7 +64,7 @@ export function registerIpcHandlers(): void {
           password !== undefined
             ? password
             : usedSavedPassword
-              ? getSavedPassword(hostAlias) ?? undefined
+              ? (getSavedPassword(hostAlias) ?? undefined)
               : undefined
         const result = await connect(hostConfig, effectivePassword, hosts)
         if (result.ok) return result
@@ -129,6 +125,56 @@ export function registerIpcHandlers(): void {
 
     await downloadFile(connectionId, remotePath, saveResult.filePath)
     return { canceled: false, savedPath: saveResult.filePath }
+  })
+
+  ipcMain.handle('ssh:download-files', async (event, { connectionId, remotePaths }) => {
+    const paths: string[] = Array.isArray(remotePaths)
+      ? remotePaths.filter((path): path is string => typeof path === 'string' && path.length > 0)
+      : []
+    if (paths.length === 0) {
+      return { canceled: true, downloaded: 0, savedPaths: [], skipped: [], failures: [] }
+    }
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const dirResult = await dialog.showOpenDialog(win!, {
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (dirResult.canceled || dirResult.filePaths.length === 0) {
+      return { canceled: true, downloaded: 0, savedPaths: [], skipped: [], failures: [] }
+    }
+
+    const localDir = dirResult.filePaths[0]
+    if (!localDir) {
+      return { canceled: true, downloaded: 0, savedPaths: [], skipped: [], failures: [] }
+    }
+    const savedPaths: string[] = []
+    const skipped: string[] = []
+    const failures: { remotePath: string; message: string }[] = []
+
+    for (const remotePath of paths) {
+      const localPath = join(localDir, basename(remotePath))
+      if (existsSync(localPath)) {
+        skipped.push(basename(remotePath))
+        continue
+      }
+      try {
+        await downloadFile(connectionId, remotePath, localPath)
+        savedPaths.push(localPath)
+      } catch (err) {
+        failures.push({
+          remotePath,
+          message: err instanceof Error ? err.message : String(err)
+        })
+      }
+    }
+
+    return {
+      canceled: false,
+      downloaded: savedPaths.length,
+      savedPaths,
+      skipped,
+      failures
+    }
   })
 
   ipcMain.handle('ssh:delete-file', async (_event, { connectionId, path }) => {

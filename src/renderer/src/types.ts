@@ -38,6 +38,14 @@ export type FileContent = {
 
 export type TerminalDataPayload = { id: string; data: string }
 export type DownloadResult = { canceled: boolean; savedPath?: string }
+export type DownloadFailure = { remotePath: string; message: string }
+export type DownloadFilesResult = {
+  canceled: boolean
+  downloaded: number
+  savedPaths: string[]
+  skipped: string[]
+  failures: DownloadFailure[]
+}
 
 export type ConnectionErrorCode =
   | 'AUTH_REQUIRED'

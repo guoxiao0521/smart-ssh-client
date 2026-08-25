@@ -40,6 +40,14 @@ export type FileContent = {
 export type TerminalDataPayload = { id: string; data: string }
 export type UploadResult = { uploaded: number; uploadedPaths: string[] }
 export type DownloadResult = { canceled: boolean; savedPath?: string }
+export type DownloadFailure = { remotePath: string; message: string }
+export type DownloadFilesResult = {
+  canceled: boolean
+  downloaded: number
+  savedPaths: string[]
+  skipped: string[]
+  failures: DownloadFailure[]
+}
 
 export type ConnectionErrorCode =
   | 'AUTH_REQUIRED'
@@ -64,7 +72,8 @@ const sshAPI = {
     ipcRenderer.invoke('ssh:create-host', hostConfig),
   updateHost: (originalAlias: string, hostConfig: HostMutationInput): Promise<SshHostConfig[]> =>
     ipcRenderer.invoke('ssh:update-host', { originalAlias, hostConfig }),
-  deleteHost: (alias: string): Promise<SshHostConfig[]> => ipcRenderer.invoke('ssh:delete-host', alias),
+  deleteHost: (alias: string): Promise<SshHostConfig[]> =>
+    ipcRenderer.invoke('ssh:delete-host', alias),
   connect: (hostAlias: string, password?: string): Promise<ConnectResult> =>
     ipcRenderer.invoke('ssh:connect', { hostAlias, password }),
   disconnect: (connectionId: string): Promise<void> =>
@@ -77,6 +86,8 @@ const sshAPI = {
     ipcRenderer.invoke('ssh:upload-file', { connectionId, remotePath }),
   downloadFile: (connectionId: string, remotePath: string): Promise<DownloadResult> =>
     ipcRenderer.invoke('ssh:download-file', { connectionId, remotePath }),
+  downloadFiles: (connectionId: string, remotePaths: string[]): Promise<DownloadFilesResult> =>
+    ipcRenderer.invoke('ssh:download-files', { connectionId, remotePaths }),
   deleteFile: (connectionId: string, path: string): Promise<void> =>
     ipcRenderer.invoke('ssh:delete-file', { connectionId, path }),
   hasSavedPassword: (hostAlias: string): Promise<boolean> =>
