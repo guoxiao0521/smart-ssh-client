@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { CircleAlert, File, FileText, LoaderCircle } from 'lucide-vue-next'
-import { ref, watch, computed } from 'vue'
+import { Check, CircleAlert, Copy, File, FileText, LoaderCircle, Minimize2 } from 'lucide-vue-next'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import hljs from 'highlight.js'
 import type { FileContent } from '../types'
+
+type CopyKind = 'plain' | 'compact'
+type CopyStatus = 'idle' | 'success' | 'error'
 
 const props = defineProps<{
   connectionId: string
@@ -13,8 +16,17 @@ const content = ref<FileContent | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const highlightedHtml = ref('')
+const copyStatus = ref<Record<CopyKind, CopyStatus>>({
+  plain: 'idle',
+  compact: 'idle'
+})
 
 let requestSeq = 0
+let copyFeedbackTimer: ReturnType<typeof setTimeout> | null = null
+
+const canCopyText = computed(
+  () => content.value?.text !== undefined && !content.value.error && !loading.value && !error.value
+)
 
 const fileExtension = computed(() => props.path.split('.').pop()?.toLowerCase() ?? '')
 
@@ -39,6 +51,7 @@ watch(
     error.value = null
     content.value = null
     highlightedHtml.value = ''
+    resetCopyStatus()
     try {
       const result = await window.ssh.readFile(connId, filePath)
       if (seq !== requestSeq) return
@@ -76,6 +89,97 @@ function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
+
+function compactJsonValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value.replace(/\s+/g, ' ').trim()
+  }
+  if (Array.isArray(value)) {
+    return value.map(compactJsonValue)
+  }
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, unknown> = {}
+    for (const [key, nested] of Object.entries(value)) {
+      result[key] = compactJsonValue(nested)
+    }
+    return result
+  }
+  return value
+}
+
+function compressText(text: string): string {
+  const trimmed = text.trim()
+  try {
+    return JSON.stringify(compactJsonValue(JSON.parse(trimmed)))
+  } catch {
+    // Not valid JSON; fall through to whitespace collapse.
+  }
+
+  return trimmed
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .filter((line) => line.length > 0)
+    .join(' ')
+}
+
+function resetCopyStatus(): void {
+  copyStatus.value = { plain: 'idle', compact: 'idle' }
+  if (copyFeedbackTimer) {
+    clearTimeout(copyFeedbackTimer)
+    copyFeedbackTimer = null
+  }
+}
+
+function showCopyFeedback(kind: CopyKind, status: CopyStatus): void {
+  copyStatus.value = { plain: 'idle', compact: 'idle', [kind]: status }
+  if (copyFeedbackTimer) clearTimeout(copyFeedbackTimer)
+  copyFeedbackTimer = setTimeout(() => {
+    copyStatus.value[kind] = 'idle'
+    copyFeedbackTimer = null
+  }, 1600)
+}
+
+function copyButtonTitle(kind: CopyKind): string {
+  const status = copyStatus.value[kind]
+  if (status === 'success') return 'Copied'
+  if (status === 'error') return 'Copy failed'
+  return kind === 'compact' ? 'Copy compacted' : 'Copy'
+}
+
+async function writeClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const ok = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!ok) throw new Error('Copy failed')
+}
+
+async function copyText(kind: CopyKind): Promise<void> {
+  const text = content.value?.text
+  if (text === undefined) return
+  try {
+    await writeClipboard(kind === 'compact' ? compressText(text) : text)
+    showCopyFeedback(kind, 'success')
+  } catch {
+    showCopyFeedback(kind, 'error')
+  }
+}
+
+onUnmounted(() => {
+  resetCopyStatus()
+})
 </script>
 
 <template>
@@ -94,7 +198,65 @@ function formatSize(bytes: number): string {
           .{{ fileExtension }}
         </span>
       </div>
-      <span v-if="content && content.size != null" class="file-size">{{ formatSize(content.size) }}</span>
+      <div class="header-right">
+        <span v-if="content && content.size != null" class="file-size">{{
+          formatSize(content.size)
+        }}</span>
+        <div v-if="canCopyText" class="copy-actions">
+          <button
+            class="copy-btn"
+            type="button"
+            :class="{
+              success: copyStatus.plain === 'success',
+              error: copyStatus.plain === 'error'
+            }"
+            :title="copyButtonTitle('plain')"
+            :aria-label="copyButtonTitle('plain')"
+            @click="copyText('plain')"
+          >
+            <Check
+              v-if="copyStatus.plain === 'success'"
+              :size="12"
+              :stroke-width="2"
+              aria-hidden="true"
+            />
+            <CircleAlert
+              v-else-if="copyStatus.plain === 'error'"
+              :size="12"
+              :stroke-width="2"
+              aria-hidden="true"
+            />
+            <Copy v-else :size="12" :stroke-width="2" aria-hidden="true" />
+            <span>Copy</span>
+          </button>
+          <button
+            class="copy-btn"
+            type="button"
+            :class="{
+              success: copyStatus.compact === 'success',
+              error: copyStatus.compact === 'error'
+            }"
+            :title="copyButtonTitle('compact')"
+            :aria-label="copyButtonTitle('compact')"
+            @click="copyText('compact')"
+          >
+            <Check
+              v-if="copyStatus.compact === 'success'"
+              :size="12"
+              :stroke-width="2"
+              aria-hidden="true"
+            />
+            <CircleAlert
+              v-else-if="copyStatus.compact === 'error'"
+              :size="12"
+              :stroke-width="2"
+              aria-hidden="true"
+            />
+            <Minimize2 v-else :size="12" :stroke-width="2" aria-hidden="true" />
+            <span>Compact</span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <div v-if="!path" class="empty-state">
@@ -223,12 +385,72 @@ function formatSize(bytes: number): string {
   font-family: var(--font-mono);
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .file-size {
   font-size: 11px;
   color: var(--color-text-muted);
   white-space: nowrap;
   flex-shrink: 0;
   font-family: var(--font-mono);
+}
+
+.copy-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.copy-btn {
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 2px 7px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    background var(--transition),
+    color var(--transition),
+    border-color var(--transition);
+}
+
+.copy-btn:hover:not(:disabled) {
+  background: var(--color-hover-strong);
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.copy-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.copy-btn:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.copy-btn.success {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.copy-btn.error {
+  color: var(--color-error);
+  border-color: var(--color-error);
 }
 
 .empty-state {
